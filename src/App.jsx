@@ -187,11 +187,31 @@ const Navbar = ({ role, setRole, isOnline }) => (
 );
 
 const SalesDashboard = () => {
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [simulatedBE, setSimulatedBE] = useState(DASHBOARD_STATS.currentBE);
+
   const attainment = Math.round((DASHBOARD_STATS.currentBE / DASHBOARD_STATS.monthlyTargetBE) * 100);
   const runRate = Math.round((DASHBOARD_STATS.currentBE / DASHBOARD_STATS.daysElapsed) * DASHBOARD_STATS.totalWorkingDays);
   const projectedAttainment = Math.round((runRate / DASHBOARD_STATS.monthlyTargetBE) * 100);
   const daysLeft = DASHBOARD_STATS.totalWorkingDays - DASHBOARD_STATS.daysElapsed;
   const shortfallPerDay = ((DASHBOARD_STATS.monthlyTargetBE - DASHBOARD_STATS.currentBE) / daysLeft).toFixed(1);
+
+  const getBonus = (att) => {
+    let bonus = 0;
+    for (const tier of DASHBOARD_STATS.incentiveTiers) {
+      if (att >= tier.threshold) bonus = tier.reward;
+    }
+    return bonus;
+  };
+
+  const currentBonus = getBonus(attainment);
+  const simAttainment = Math.round((simulatedBE / DASHBOARD_STATS.monthlyTargetBE) * 100);
+  const projectedBonus = getBonus(simAttainment);
+
+  const nextTier = DASHBOARD_STATS.incentiveTiers.find(t => t.threshold > attainment);
+  const beNeededForNextTier = nextTier
+    ? Math.ceil((nextTier.threshold / 100) * DASHBOARD_STATS.monthlyTargetBE - DASHBOARD_STATS.currentBE)
+    : null;
 
   return (
     <div className="space-y-6 mb-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -240,22 +260,34 @@ const SalesDashboard = () => {
       <section>
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-bold text-slate-900 dark:text-white">Progress Insentif</h3>
-          <span className="text-xs text-blue-600 font-semibold cursor-pointer">Simulasi "What-If"</span>
+          <span 
+            className="text-xs text-blue-600 font-semibold cursor-pointer select-none"
+            onClick={() => setIsSimulating(!isSimulating)}
+          >
+            {isSimulating ? 'Tutup Simulasi' : 'Simulasi "What-If"'}
+          </span>
         </div>
-        <Card className="space-y-6">
+        <Card className="space-y-4">
           <div className="relative pt-2">
-            <div className="h-3 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+            <div className="h-3 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden relative">
               <div 
-                className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full" 
+                className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full transition-all duration-700 ease-out" 
                 style={{ width: `${Math.min(attainment, 110)}%` }}
               ></div>
+              {isSimulating && (
+                <div 
+                  className="ghost-bar dark:opacity-60"
+                  style={{ width: `${Math.min((simulatedBE / DASHBOARD_STATS.monthlyTargetBE) * 100, 110)}%` }}
+                ></div>
+              )}
             </div>
             
             <div className="flex justify-between mt-4">
               {DASHBOARD_STATS.incentiveTiers.map((tier, idx) => (
                 <div key={idx} className="flex flex-col items-center">
-                  <div className={`text-[10px] font-bold mb-1 ${attainment >= tier.threshold ? 'text-emerald-600' : 'text-slate-400'}`}>
+                  <div className={`text-[10px] font-bold mb-1 ${attainment >= tier.threshold ? 'text-emerald-600' : 'text-slate-400'} flex items-center gap-0.5`}>
                     {tier.threshold}%
+                    {attainment >= tier.threshold && <CheckCircle className="w-3 h-3 text-emerald-500" />}
                   </div>
                   <div className={`h-2 w-0.5 ${attainment >= tier.threshold ? 'bg-emerald-500' : 'bg-slate-200 dark:bg-slate-700'}`}></div>
                   <div className={`mt-1 text-[10px] font-medium ${attainment >= tier.threshold ? 'text-slate-900 dark:text-white' : 'text-slate-400'}`}>
@@ -264,14 +296,84 @@ const SalesDashboard = () => {
                 </div>
               ))}
             </div>
+
+            {nextTier && (
+              <p className="text-xs text-slate-500 mt-3 text-center">
+                Butuh <span className="font-bold text-slate-700 dark:text-slate-300">{beNeededForNextTier} BE</span> lagi untuk <span className="font-bold text-emerald-600">{nextTier.label}</span> (Rp {(nextTier.reward / 1000000).toFixed(1)}jt)
+              </p>
+            )}
           </div>
           
           <div className="pt-2 border-t border-slate-50 dark:border-slate-800 flex items-center justify-between">
             <span className="text-xs text-slate-500">Estimasi Bonus Saat Ini:</span>
             <span className="text-sm font-bold text-emerald-600">
-              Rp {attainment >= 90 ? '1.000.000' : '0'}
+              Rp {currentBonus.toLocaleString('id-ID')}
             </span>
           </div>
+
+          {/* What-If Simulator Panel */}
+          {isSimulating && (
+            <div className="animate-slide-down pt-4 border-t border-slate-50 dark:border-slate-800">
+              <div className="space-y-4">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Proyeksi BE Akhir Bulan</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min="0"
+                        value={simulatedBE}
+                        onChange={(e) => setSimulatedBE(Math.max(0, Number(e.target.value)))}
+                        className="w-24 text-right text-sm font-bold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 focus:ring-2 focus:ring-emerald-500 outline-none transition-shadow"
+                      />
+                      <span className="text-xs text-slate-400 font-medium">BE</span>
+                    </div>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max={Math.round(DASHBOARD_STATS.monthlyTargetBE * 1.3)}
+                    step="1"
+                    value={simulatedBE}
+                    onChange={(e) => setSimulatedBE(Number(e.target.value))}
+                    className="sim-slider"
+                  />
+                  <div className="flex justify-between text-[10px] text-slate-400 mt-1 font-medium">
+                    <span>0 BE</span>
+                    <span>{Math.round(DASHBOARD_STATS.monthlyTargetBE * 1.3)} BE</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 text-center">
+                    <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">Attainment</p>
+                    <p className={`text-lg font-bold ${simAttainment >= 100 ? 'text-emerald-500' : 'text-slate-900 dark:text-white'}`}>
+                      {simAttainment}%
+                    </p>
+                  </div>
+                  <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 text-center">
+                    <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">Est. Bonus</p>
+                    <p className="text-lg font-bold text-emerald-600">
+                      Rp {(projectedBonus / 1000000).toFixed(1)}jt
+                    </p>
+                  </div>
+                </div>
+
+                {projectedBonus !== currentBonus && (
+                  <div className={`text-xs font-bold text-center py-2.5 rounded-lg ${
+                    projectedBonus > currentBonus 
+                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400' 
+                      : 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400'
+                  }`}>
+                    {projectedBonus > currentBonus 
+                      ? `+Rp ${((projectedBonus - currentBonus) / 1000000).toFixed(1)}jt vs realitas saat ini`
+                      : `-Rp ${((currentBonus - projectedBonus) / 1000000).toFixed(1)}jt vs realitas saat ini`
+                    }
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </Card>
       </section>
 
