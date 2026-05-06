@@ -20,7 +20,9 @@ import {
   Calendar,
   MessageSquare,
   History,
-  MapPin
+  MapPin,
+  Navigation,
+  ShoppingBag
 } from 'lucide-react';
 
 // --- Mock Data ---
@@ -84,6 +86,19 @@ const TEAM_STATS = [
   { name: "Siti Aminah", attainment: 92.1, status: "success", trend: "up" },
   { name: "Agus Prayogo", attainment: 45.3, status: "danger", trend: "down" },
   { name: "Dewi Lestari", attainment: 78.0, status: "warning", trend: "stable" }
+];
+
+const SKU_PERFORMANCE = [
+  { name: "Pisang Cavendish", volume: 450, trend: 15, color: "bg-yellow-400" },
+  { name: "Nanas Madu", volume: 210, trend: -5, color: "bg-orange-400" },
+  { name: "Jeruk Siam", volume: 185.5, trend: 22, color: "bg-emerald-400" }
+];
+
+const SCHEDULE = [
+  { id: 1, time: "09:00", outlet: "Toko Buah Sejahtera", type: "Regular Visit", status: "completed" },
+  { id: 2, time: "11:30", outlet: "Fresh Market Cilandak", type: "Urgent: Drop in Volume", status: "pending", priority: "high" },
+  { id: 3, time: "14:00", outlet: "Hotel Grand Menteng", type: "Re-stock Check", status: "pending" },
+  { id: 4, time: "16:00", outlet: "Resto Ayam Penyet", type: "New Product Intro", status: "pending" }
 ];
 
 // --- Components ---
@@ -186,7 +201,7 @@ const Navbar = ({ role, setRole, isOnline }) => (
   </nav>
 );
 
-const SalesDashboard = () => {
+const SalesDashboard = ({ onVisitClick }) => {
   const [isSimulating, setIsSimulating] = useState(false);
   const [simulatedBE, setSimulatedBE] = useState(DASHBOARD_STATS.currentBE);
 
@@ -377,6 +392,71 @@ const SalesDashboard = () => {
         </Card>
       </section>
 
+      {/* Product Analysis (SKU) */}
+      <section>
+        <div className="flex items-center justify-between mb-3 px-1">
+          <h3 className="font-bold flex items-center gap-2"><ShoppingBag className="w-4 h-4 text-orange-500" /> Analisa Produk</h3>
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Volume (BE)</span>
+        </div>
+        <Card className="space-y-4">
+          {SKU_PERFORMANCE.map((sku, idx) => (
+            <div key={idx} className="space-y-1.5">
+              <div className="flex justify-between text-xs font-bold">
+                <span className="text-slate-600 dark:text-slate-300">{sku.name}</span>
+                <span className="flex items-center gap-1">
+                  {sku.volume} BE
+                  <span className={sku.trend > 0 ? 'text-emerald-500' : 'text-red-500'}>
+                    ({sku.trend > 0 ? '+' : ''}{sku.trend}%)
+                  </span>
+                </span>
+              </div>
+              <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                <div
+                  className={`h-full ${sku.color} rounded-full`}
+                  style={{ width: `${(sku.volume / SKU_PERFORMANCE[0].volume) * 100}%` }}
+                ></div>
+              </div>
+            </div>
+          ))}
+        </Card>
+      </section>
+
+      {/* Activity Schedule (Visits) */}
+      <section>
+        <div className="flex items-center justify-between mb-3 px-1">
+          <h3 className="font-bold flex items-center gap-2"><Navigation className="w-4 h-4 text-emerald-600" /> Jadwal Kunjungan</h3>
+          <span className="text-xs text-slate-400 font-medium underline">Lihat Peta</span>
+        </div>
+        <div className="space-y-3">
+          {SCHEDULE.map((task) => (
+            <Card key={task.id} className={`p-4 ${task.status === 'completed' ? 'opacity-60 bg-slate-50' : task.priority === 'high' ? 'border-l-4 border-l-red-500' : ''}`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex flex-col items-center">
+                    <span className="text-xs font-bold text-slate-900 dark:text-white">{task.time}</span>
+                    <div className="w-px h-6 bg-slate-200 dark:bg-slate-800 my-1"></div>
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-900 dark:text-white">{task.outlet}</h4>
+                    <p className={`text-left text-[10px] font-bold uppercase tracking-tight ${task.priority === 'high' ? 'text-red-500' : 'text-slate-400'}`}>{task.type}</p>
+                  </div>
+                </div>
+                {task.status === 'completed' ? (
+                  <div className="bg-emerald-100 text-emerald-600 p-1.5 rounded-full"><CheckCircle className="w-4 h-4" /></div>
+                ) : (
+                  <button
+                    onClick={() => onVisitClick && onVisitClick(OUTLETS.find(o => o.name === task.outlet))}
+                    className="text-[10px] font-bold bg-emerald-600 text-white px-3 py-1.5 rounded-lg active:scale-95 transition-transform"
+                  >
+                    Check-in
+                  </button>
+                )}
+              </div>
+            </Card>
+          ))}
+        </div>
+      </section>
+
       {/* Outlet Health Section */}
       <section className="pb-10">
         <div className="flex items-center justify-between mb-3">
@@ -391,7 +471,7 @@ const SalesDashboard = () => {
                   <AlertTriangle className="w-5 h-5" />
                 </div>
                 <div>
-                  <h4 className="text-sm font-bold text-slate-900 dark:text-white">{outlet.name}</h4>
+                  <h4 className="text-sm text-left font-bold text-slate-900 dark:text-white">{outlet.name}</h4>
                   <p className="text-[10px] text-slate-500 uppercase font-medium">{outlet.alert} • Turun {Math.abs(outlet.trend)}%</p>
                 </div>
               </div>
@@ -633,7 +713,7 @@ export default function App() {
 
     switch (activeTab) {
       case 'home':
-        return role === 'sales' ? <SalesDashboard /> : <SupervisorDashboard />;
+        return role === 'sales' ? <SalesDashboard onVisitClick={navigateToOutlet} /> : <SupervisorDashboard />;
       case 'outlets':
         return <OutletListView onSelectOutlet={navigateToOutlet} />;
       case 'team':
@@ -646,7 +726,7 @@ export default function App() {
           </div>
         );
       default:
-        return role === 'sales' ? <SalesDashboard /> : <SupervisorDashboard />;
+        return role === 'sales' ? <SalesDashboard onVisitClick={navigateToOutlet} /> : <SupervisorDashboard />;
     }
   };
 
