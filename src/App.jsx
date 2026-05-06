@@ -159,7 +159,7 @@ const Navbar = ({ role, setRole, isOnline }) => (
           <TrendingUp className="text-white w-5 h-5" />
         </div>
         <div>
-          <h1 className="text-sm font-bold text-slate-900 dark:text-white leading-tight">FruitIntelligence</h1>
+          <h1 className="text-sm font-bold tracking-normal text-slate-900 dark:text-white leading-tight mb-1">Fruit Intelligence</h1>
           <div className="flex items-center gap-1">
              {isOnline ? <Wifi className="w-3 h-3 text-emerald-500" /> : <WifiOff className="w-3 h-3 text-red-500" />}
              <span className="text-[10px] text-slate-500 font-medium uppercase tracking-tighter">
@@ -194,7 +194,7 @@ const SalesDashboard = () => {
   const shortfallPerDay = ((DASHBOARD_STATS.monthlyTargetBE - DASHBOARD_STATS.currentBE) / daysLeft).toFixed(1);
 
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+    <div className="space-y-6 mb-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
       {/* Header Info */}
       <section>
         <h2 className="text-xl font-bold text-slate-900 dark:text-white">Halo, {CURRENT_USER.name}</h2>
@@ -306,7 +306,7 @@ const SalesDashboard = () => {
 
 const SupervisorDashboard = () => {
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-10">
+    <div className="space-y-6 mb-10 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-10">
       <section>
         <h2 className="text-xl font-bold text-slate-900 dark:text-white">Team Performance</h2>
         <p className="text-sm text-slate-500">Region: Jakarta Selatan • 4 Active Reps</p>
@@ -387,7 +387,7 @@ const OutletListView = ({ onSelectOutlet }) => {
   const filtered = OUTLETS.filter(o => o.name.toLowerCase().includes(search.toLowerCase()));
 
   return (
-    <div className="space-y-4 pb-20 animate-in fade-in">
+    <div className="space-y-4 pb-32 animate-in fade-in">
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
         <input
