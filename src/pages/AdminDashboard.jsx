@@ -61,7 +61,11 @@ export default function AdminDashboard() {
   };
 
   // Form Handlers
-  const openRecordEdit = (r = null) => { setEditingRecord(r); setRecForm(r || { outlet: '', sales: '', date: '', be: '', sku: '' }); setShowRecForm(true); };
+  const openRecordEdit = (r = null) => { 
+    setEditingRecord(r); 
+    setRecForm(r || { outlet: '', sales: '', date: '', be: '', sku: '' }); 
+    setShowRecForm(true); 
+  };
   const openUserEdit = (u = null) => { setEditingUser(u); setUserForm(u || { name: '', role: 'sales', region: '' }); setShowUserForm(true); };
   const openOutletEdit = (o = null) => { setEditingOutlet(o); setOutletForm(o || { name: '', type: '', address: '', contact_person: '' }); setShowOutletForm(true); };
 
@@ -103,12 +107,36 @@ export default function AdminDashboard() {
 
             {showRecForm && (
               <form onSubmit={(e) => { e.preventDefault(); handleCrud('records', editingRecord ? 'PUT' : 'POST', editingRecord?.id, recForm, setRecords, () => setShowRecForm(false)); }} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6 grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Outlet</label><input required value={recForm.outlet} onChange={e=>setRecForm({...recForm, outlet:e.target.value})} className="w-full px-3 py-2 border rounded-lg bg-transparent" placeholder="Outlet Name" /></div>
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Sales</label><input required value={recForm.sales} onChange={e=>setRecForm({...recForm, sales:e.target.value})} className="w-full px-3 py-2 border rounded-lg bg-transparent" placeholder="Sales Name" /></div>
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Date</label><input type="date" required value={recForm.date} onChange={e=>setRecForm({...recForm, date:e.target.value})} className="w-full px-3 py-2 border rounded-lg bg-transparent" /></div>
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Vol BE</label><input type="number" required value={recForm.be} onChange={e=>setRecForm({...recForm, be:e.target.value})} className="w-full px-3 py-2 border rounded-lg bg-transparent" /></div>
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">SKU</label><input value={recForm.sku} onChange={e=>setRecForm({...recForm, sku:e.target.value})} className="w-full px-3 py-2 border rounded-lg bg-transparent" placeholder="Optional" /></div>
-                <div className="md:col-span-1 flex gap-2"><button type="submit" className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium">Save</button><button type="button" onClick={()=>setShowRecForm(false)} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg text-sm"><X className="w-4 h-4 mx-auto"/></button></div>
+                <div className="md:col-span-1">
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Outlet</label>
+                  <select required value={recForm.outlet} onChange={e=>setRecForm({...recForm, outlet:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800 focus:ring-2 focus:ring-emerald-500 outline-none">
+                    <option value="" disabled>Select Outlet</option>
+                    {outlets.map(o => <option key={o.id} value={o.name}>{o.name}</option>)}
+                  </select>
+                </div>
+                <div className="md:col-span-1">
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Sales</label>
+                  <select required value={recForm.sales} onChange={e=>setRecForm({...recForm, sales:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800 focus:ring-2 focus:ring-emerald-500 outline-none">
+                    <option value="" disabled>Select Sales</option>
+                    {users.map(u => <option key={u.id} value={u.name}>{u.name} ({u.role})</option>)}
+                  </select>
+                </div>
+                <div className="md:col-span-1">
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Date</label>
+                  <input type="date" required value={recForm.date} onChange={e=>setRecForm({...recForm, date:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent focus:ring-2 focus:ring-emerald-500 outline-none" />
+                </div>
+                <div className="md:col-span-1">
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Vol BE</label>
+                  <input type="number" step="0.1" required value={recForm.be} onChange={e=>setRecForm({...recForm, be:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent focus:ring-2 focus:ring-emerald-500 outline-none" />
+                </div>
+                <div className="md:col-span-1">
+                  <label className="block text-xs font-medium text-slate-500 mb-1">SKU</label>
+                  <input value={recForm.sku} onChange={e=>setRecForm({...recForm, sku:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="Optional" />
+                </div>
+                <div className="md:col-span-1 flex gap-2">
+                  <button type="submit" className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">Save</button>
+                  <button type="button" onClick={()=>setShowRecForm(false)} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg text-sm hover:bg-slate-200 dark:hover:bg-slate-700"><X className="w-4 h-4 mx-auto"/></button>
+                </div>
               </form>
             )}
 
@@ -134,11 +162,11 @@ export default function AdminDashboard() {
           <div className="space-y-6">
             {showOutletForm && (
               <form onSubmit={(e) => { e.preventDefault(); handleCrud('outlets', editingOutlet ? 'PUT' : 'POST', editingOutlet?.id, outletForm, setOutlets, () => setShowOutletForm(false)); }} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6 grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
-                <div><label className="block text-xs font-medium text-slate-500 mb-1">Name</label><input required value={outletForm.name} onChange={e=>setOutletForm({...outletForm, name:e.target.value})} className="w-full px-3 py-2 border rounded-lg bg-transparent" placeholder="Outlet Name" /></div>
-                <div><label className="block text-xs font-medium text-slate-500 mb-1">Type</label><input value={outletForm.type} onChange={e=>setOutletForm({...outletForm, type:e.target.value})} className="w-full px-3 py-2 border rounded-lg bg-transparent" placeholder="Warung, Hotel..." /></div>
-                <div><label className="block text-xs font-medium text-slate-500 mb-1">Address</label><input value={outletForm.address} onChange={e=>setOutletForm({...outletForm, address:e.target.value})} className="w-full px-3 py-2 border rounded-lg bg-transparent" placeholder="Address" /></div>
-                <div><label className="block text-xs font-medium text-slate-500 mb-1">Contact</label><input value={outletForm.contact_person} onChange={e=>setOutletForm({...outletForm, contact_person:e.target.value})} className="w-full px-3 py-2 border rounded-lg bg-transparent" placeholder="Person/Phone" /></div>
-                <div className="flex gap-2"><button type="submit" className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium">Save</button><button type="button" onClick={()=>setShowOutletForm(false)} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg"><X className="w-4 h-4 mx-auto"/></button></div>
+                <div><label className="block text-xs font-medium text-slate-500 mb-1">Name</label><input required value={outletForm.name} onChange={e=>setOutletForm({...outletForm, name:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="Outlet Name" /></div>
+                <div><label className="block text-xs font-medium text-slate-500 mb-1">Type</label><input value={outletForm.type} onChange={e=>setOutletForm({...outletForm, type:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="Warung, Hotel..." /></div>
+                <div><label className="block text-xs font-medium text-slate-500 mb-1">Address</label><input value={outletForm.address} onChange={e=>setOutletForm({...outletForm, address:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="Address" /></div>
+                <div><label className="block text-xs font-medium text-slate-500 mb-1">Contact</label><input value={outletForm.contact_person} onChange={e=>setOutletForm({...outletForm, contact_person:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="Person/Phone" /></div>
+                <div className="flex gap-2"><button type="submit" className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">Save</button><button type="button" onClick={()=>setShowOutletForm(false)} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700"><X className="w-4 h-4 mx-auto"/></button></div>
               </form>
             )}
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6">
@@ -166,10 +194,10 @@ export default function AdminDashboard() {
           <div className="space-y-6">
             {showUserForm && (
               <form onSubmit={(e) => { e.preventDefault(); handleCrud('users', editingUser ? 'PUT' : 'POST', editingUser?.id, userForm, setUsers, () => setShowUserForm(false)); }} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6 grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-                <div><label className="block text-xs font-medium text-slate-500 mb-1">Full Name</label><input required value={userForm.name} onChange={e=>setUserForm({...userForm, name:e.target.value})} className="w-full px-3 py-2 border rounded-lg bg-transparent" placeholder="Name" /></div>
-                <div><label className="block text-xs font-medium text-slate-500 mb-1">Role</label><select value={userForm.role} onChange={e=>setUserForm({...userForm, role:e.target.value})} className="w-full px-3 py-2 border rounded-lg bg-transparent"><option value="sales">Sales</option><option value="supervisor">Supervisor</option><option value="admin">Admin</option></select></div>
-                <div><label className="block text-xs font-medium text-slate-500 mb-1">Region</label><input value={userForm.region} onChange={e=>setUserForm({...userForm, region:e.target.value})} className="w-full px-3 py-2 border rounded-lg bg-transparent" placeholder="Region" /></div>
-                <div className="flex gap-2"><button type="submit" className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium">Save</button><button type="button" onClick={()=>setShowUserForm(false)} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg"><X className="w-4 h-4 mx-auto"/></button></div>
+                <div><label className="block text-xs font-medium text-slate-500 mb-1">Full Name</label><input required value={userForm.name} onChange={e=>setUserForm({...userForm, name:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="Name" /></div>
+                <div><label className="block text-xs font-medium text-slate-500 mb-1">Role</label><select value={userForm.role} onChange={e=>setUserForm({...userForm, role:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent focus:ring-2 focus:ring-emerald-500 outline-none"><option value="sales">Sales</option><option value="supervisor">Supervisor</option><option value="admin">Admin</option></select></div>
+                <div><label className="block text-xs font-medium text-slate-500 mb-1">Region</label><input value={userForm.region} onChange={e=>setUserForm({...userForm, region:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="Region" /></div>
+                <div className="flex gap-2"><button type="submit" className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">Save</button><button type="button" onClick={()=>setShowUserForm(false)} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700"><X className="w-4 h-4 mx-auto"/></button></div>
               </form>
             )}
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6">
