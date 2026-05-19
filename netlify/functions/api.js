@@ -1,8 +1,15 @@
+import 'dotenv/config';
 import { neon } from '@neondatabase/serverless';
 import xlsx from 'xlsx';
 import Busboy from 'busboy';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 
-const sql = neon(process.env.DATABASE_URL);
+const rawDbUrl = process.env.DATABASE_URL || '';
+const DATABASE_URL = rawDbUrl.replace(/([?&])channel_binding=[^&]*&?/g, '$1').replace(/[?&]$/, '');
+const sql = neon(DATABASE_URL);
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
+const DEFAULT_PASSWORD = process.env.DEFAULT_PASSWORD || 'Password123!';
 
 const parseExcelDate = (val) => {
   if (!val) return null;
@@ -51,18 +58,29 @@ const transformToFrontend = async () => {
   };
 };
 
-export const handler = async (event, context) => {
+const _handler = async (event, context) => {
   const params = event.queryStringParameters || {};
   const type = params.type || 'records';
   const id = params.id;
   const isJson = event.headers['content-type']?.includes('application/json');
 
   try {
+    // --- AUTH ---
+    if (type === 'auth' && event.httpMethod === 'POST') {
+      const { email, password } = JSON.parse(event.body);
+      const user = await sql`SELECT * FROM users WHERE email = ${email}`;
+      if (!user[0] || !user[0].password_hash || !(await bcrypt.compare(password, user[0].password_hash))) {
+        return { statusCode: 401, body: JSON.stringify({ error: 'Invalid email or password' }) };
+      }
+      const token = jwt.sign({ id: user[0].id, role: user[0].role, email: user[0].email }, JWT_SECRET, { expiresIn: '7d' });
+      return { statusCode: 200, body: JSON.stringify({ token, user: { id: user[0].id, name: user[0].name, role: user[0].role, region: user[0].region } }) };
+    }
+
     // --- GET ---
     if (event.httpMethod === 'GET') {
       if (type === 'users') {
-        const res = await sql`SELECT id, name, role, region, created_at FROM users ORDER BY created_at DESC`;
-        return { statusCode: 200, body: JSON.stringify(res) };
+        const res = await sql`SELECT id, name, email, role, region, created_at FROM users ORDER BY created_at DESC`;
+        return { statusCode: 200, body: JSON.stringify(res.map(u => ({...u, password_hash: '••••••'}))) };
       }
       if (type === 'outlets') {
         const res = await sql`SELECT id, name, type, address, contact_person, created_at FROM outlets ORDER BY created_at DESC`;
@@ -87,9 +105,9 @@ export const handler = async (event, context) => {
       const body = isJson ? JSON.parse(event.body) : null;
 
       if (type === 'users' && isJson) {
-        const { name, role, region } = body;
-        const res = await sql`INSERT INTO users (id, name, role, region, netlify_uid) VALUES (gen_random_uuid(), ${name}, ${role}, ${region||''}, gen_random_uuid()::text) RETURNING *`;
-        return { statusCode: 201, body: JSON.stringify(res[0]) };
+        const hash = await bcrypt.hash(body.password || DEFAULT_PASSWORD, 10);
+        const res = await sql`INSERT INTO users (id, name, email, role, region, password_hash, netlify_uid) VALUES (gen_random_uuid(), ${body.name}, ${body.email}, ${body.role}, ${body.region||''}, ${hash}, gen_random_uuid()::text) RETURNING *`;
+        return { statusCode: 201, body: JSON.stringify({ ...res[0], password_hash: '••••••' }) };
       }
       if (type === 'outlets' && isJson) {
         const { name, type: otype, address, contact_person } = body;
@@ -132,14 +150,17 @@ export const handler = async (event, context) => {
     if (event.httpMethod === 'PUT' && id && isJson) {
       const body = JSON.parse(event.body);
       if (type === 'users') {
-        const res = await sql`UPDATE users SET name=${body.name}, role=${body.role}, region=${body.region||''} WHERE id=${id} RETURNING *`;
+        const updateData = { name: body.name, role: body.role, region: body.region || '' };
+        if (body.password && body.password !== '••••••') updateData.password_hash = await bcrypt.hash(body.password, 10);
+        
+        const fields = Object.keys(updateData).map(k => `${k}=${updateData[k]}`).join(', ');
+        const res = await sql`UPDATE users SET name=${body.name}, role=${body.role}, region=${body.region||''}, password_hash=COALESCE(${updateData.password_hash}, password_hash) WHERE id=${id} RETURNING *`;
         return { statusCode: res.length ? 200 : 404, body: JSON.stringify(res[0] || { error: 'Not found' }) };
       }
       if (type === 'outlets') {
         const res = await sql`UPDATE outlets SET name=${body.name}, type=${body.type||''}, address=${body.address||''}, contact_person=${body.contact_person||''} WHERE id=${id} RETURNING *`;
         return { statusCode: res.length ? 200 : 404, body: JSON.stringify(res[0] || { error: 'Not found' }) };
       }
-      // Default: Update Record
       const res = await sql`
         UPDATE sales_records SET 
           outlet_id = (SELECT id FROM outlets WHERE name = ${body.outlet}),
@@ -163,4 +184,25 @@ export const handler = async (event, context) => {
   }
 
   return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) };
+};
+
+const corsHeaders = {
+  'Content-Type': 'application/json',
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS'
+};
+
+export const handler = async (event, context) => {
+  if (event.httpMethod === 'OPTIONS') {
+    return { statusCode: 204, headers: corsHeaders, body: '' };
+  }
+  const result = await _handler(event, context);
+  return {
+    ...result,
+    headers: {
+      ...(result.headers || {}),
+      ...corsHeaders
+    }
+  };
 };

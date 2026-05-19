@@ -1,50 +1,47 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import App from './App.jsx';
 import AdminDashboard from './pages/AdminDashboard.jsx';
+import Login from './pages/Login.jsx';
 import './index.css';
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
-  const [role, setRole] = useState(localStorage.getItem('user_role') || 'sales');
+  const token = localStorage.getItem('token');
+  const role = localStorage.getItem('user_role');
 
-  useEffect(() => {
-    localStorage.setItem('user_role', role);
-  }, [role]);
-
-  if (!allowedRoles.includes(role)) {
-    return (
-      <div className="flex flex-col items-center justify-center h-screen gap-4 bg-slate-50 dark:bg-slate-950">
-        <p className="text-red-500 font-bold">Access Denied: Current role is "{role}"</p>
-        <select
-          value={role}
-          onChange={(e) => setRole(e.target.value)}
-          className="px-3 py-2 border rounded bg-white dark:bg-slate-800 dark:text-white"
-        >
-          <option value="sales">Sales</option>
-          <option value="supervisor">Supervisor</option>
-          <option value="admin">Admin</option>
-        </select>
-        <p className="text-xs text-slate-400">Change role to bypass guard</p>
-      </div>
-    );
-  }
+  if (!token) return <Navigate to="/login" replace />;
+  if (allowedRoles && !allowedRoles.includes(role)) return <Navigate to="/" replace />;
   return children;
 };
+
+// Constraint A: Mobile layout wrapper
+const MobileLayout = ({ children }) => (
+  <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex justify-center">
+    <div className="w-full max-w-lg mx-auto p-4 pt-6">{children}</div>
+  </div>
+);
+
+// Full-width wrapper
+const FullWidthLayout = ({ children }) => (
+  <div className="min-h-screen bg-slate-50 dark:bg-slate-950 w-full">{children}</div>
+);
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<App />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/" element={
+          <MobileLayout>
+            <App />
+          </MobileLayout>
+        } />
         <Route path="/admin" element={
           <ProtectedRoute allowedRoles={['admin']}>
-            <AdminDashboard />
-          </ProtectedRoute>
-        } />
-        <Route path="/supervisor" element={
-          <ProtectedRoute allowedRoles={['supervisor', 'admin']}>
-            <div className="p-10 text-center text-slate-500">Supervisor Analytics Route (Extend as needed)</div>
+            <FullWidthLayout>
+              <AdminDashboard />
+            </FullWidthLayout>
           </ProtectedRoute>
         } />
       </Routes>

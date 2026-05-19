@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Upload, RefreshCw, Edit2, Trash2, Plus, Users, Database, Store, X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Upload, RefreshCw, Edit2, Trash2, Plus, Users, Database, Store, X, LogOut, ArrowLeft } from 'lucide-react';
 
 export default function AdminDashboard() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('records');
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
@@ -15,14 +17,13 @@ export default function AdminDashboard() {
   const [showRecForm, setShowRecForm] = useState(false);
 
   const [editingUser, setEditingUser] = useState(null);
-  const [userForm, setUserForm] = useState({ name: '', role: 'sales', region: '' });
+  const [userForm, setUserForm] = useState({ name: '', email: '', role: 'sales', region: '', password: '' });
   const [showUserForm, setShowUserForm] = useState(false);
 
   const [editingOutlet, setEditingOutlet] = useState(null);
   const [outletForm, setOutletForm] = useState({ name: '', type: '', address: '', contact_person: '' });
   const [showOutletForm, setShowOutletForm] = useState(false);
 
-  // Fetchers
   const fetchData = async () => {
     setLoading(true);
     const endpoints = ['/api?type=records', '/api?type=users', '/api?type=outlets'];
@@ -35,7 +36,12 @@ export default function AdminDashboard() {
   };
   useEffect(() => { fetchData(); }, []);
 
-  // Generic CRUD Handler
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user_role');
+    navigate('/login');
+  };
+
   const handleCrud = async (type, method, id, form, setList, resetState) => {
     try {
       const url = id ? `/.netlify/functions/api?type=${type}&id=${id}` : `/.netlify/functions/api?type=${type}`;
@@ -47,7 +53,6 @@ export default function AdminDashboard() {
     } catch (e) { setMessage(`❌ ${e.message}`); }
   };
 
-  // Upload Handler
   const handleUpload = async (e) => {
     e.preventDefault();
     const file = e.target.files[0];
@@ -60,13 +65,8 @@ export default function AdminDashboard() {
     } catch(e) { setMessage('❌ Upload failed'); }
   };
 
-  // Form Handlers
-  const openRecordEdit = (r = null) => { 
-    setEditingRecord(r); 
-    setRecForm(r || { outlet: '', sales: '', date: '', be: '', sku: '' }); 
-    setShowRecForm(true); 
-  };
-  const openUserEdit = (u = null) => { setEditingUser(u); setUserForm(u || { name: '', role: 'sales', region: '' }); setShowUserForm(true); };
+  const openRecordEdit = (r = null) => { setEditingRecord(r); setRecForm(r || { outlet: '', sales: '', date: '', be: '', sku: '' }); setShowRecForm(true); };
+  const openUserEdit = (u = null) => { setEditingUser(u); setUserForm(u || { name: '', email: '', role: 'sales', region: '', password: '' }); setShowUserForm(true); };
   const openOutletEdit = (o = null) => { setEditingOutlet(o); setOutletForm(o || { name: '', type: '', address: '', contact_person: '' }); setShowOutletForm(true); };
 
   const tabs = [
@@ -78,24 +78,30 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
       {/* Header */}
-      <div className="bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 px-4 lg:px-8 py-4 sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Admin Dashboard</h1>
-          <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg w-full sm:w-auto">
-            {tabs.map(t => (
-              <button key={t.id} onClick={() => setActiveTab(t.id)} className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === t.id ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white' : 'text-slate-500 hover:text-slate-700'}`}>
-                <t.icon className="w-4 h-4" /> {t.label}
-              </button>
-            ))}
+      <div className="bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 px-6 lg:px-10 py-4 sticky top-0 z-30">
+        <div className="max-w-[1400px] mx-auto flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <button onClick={()=>navigate('/')} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors" title="Back to Sales Dashboard"><ArrowLeft className="w-5 h-5 text-slate-600 dark:text-slate-400"/></button>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Admin Dashboard</h1>
+          </div>
+          <div className="flex items-center gap-3 w-full lg:w-auto">
+            <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg w-full lg:w-auto">
+              {tabs.map(t => (
+                <button key={t.id} onClick={() => setActiveTab(t.id)} className={`flex-1 lg:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === t.id ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white' : 'text-slate-500 hover:text-slate-700'}`}>
+                  <t.icon className="w-4 h-4" /> {t.label}
+                </button>
+              ))}
+            </div>
+            <button onClick={handleLogout} className="flex items-center gap-2 px-3 py-2 bg-red-50 text-red-600 dark:bg-red-950/50 dark:text-red-400 rounded-lg hover:bg-red-100 dark:hover:bg-red-950/80 transition-colors">
+              <LogOut className="w-4 h-4" /> <span className="hidden sm:inline">Logout</span>
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Toast */}
-      {message && <div className="max-w-7xl mx-auto px-4 lg:px-8 mt-4"><div className={`p-3 rounded-lg text-sm font-medium ${message.includes('✅') ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400' : 'bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-400'}`}>{message} <button onClick={() => setMessage('')} className="ml-2 underline">Dismiss</button></div></div>}
+      {message && <div className="max-w-[1400px] mx-auto px-6 lg:px-10 mt-4"><div className={`p-3 rounded-lg text-sm font-medium ${message.includes('✅') ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400' : 'bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-400'}`}>{message} <button onClick={() => setMessage('')} className="ml-2 underline">Dismiss</button></div></div>}
 
-      <main className="max-w-7xl mx-auto px-4 lg:px-8 py-6">
-        {/* RECORDS TAB */}
+      <main className="max-w-[1400px] mx-auto px-6 lg:px-10 py-6">
         {activeTab === 'records' && (
           <div className="space-y-6">
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6">
@@ -107,36 +113,12 @@ export default function AdminDashboard() {
 
             {showRecForm && (
               <form onSubmit={(e) => { e.preventDefault(); handleCrud('records', editingRecord ? 'PUT' : 'POST', editingRecord?.id, recForm, setRecords, () => setShowRecForm(false)); }} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6 grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
-                <div className="md:col-span-1">
-                  <label className="block text-xs font-medium text-slate-500 mb-1">Outlet</label>
-                  <select required value={recForm.outlet} onChange={e=>setRecForm({...recForm, outlet:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800 focus:ring-2 focus:ring-emerald-500 outline-none">
-                    <option value="" disabled>Select Outlet</option>
-                    {outlets.map(o => <option key={o.id} value={o.name}>{o.name}</option>)}
-                  </select>
-                </div>
-                <div className="md:col-span-1">
-                  <label className="block text-xs font-medium text-slate-500 mb-1">Sales</label>
-                  <select required value={recForm.sales} onChange={e=>setRecForm({...recForm, sales:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800 focus:ring-2 focus:ring-emerald-500 outline-none">
-                    <option value="" disabled>Select Sales</option>
-                    {users.map(u => <option key={u.id} value={u.name}>{u.name} ({u.role})</option>)}
-                  </select>
-                </div>
-                <div className="md:col-span-1">
-                  <label className="block text-xs font-medium text-slate-500 mb-1">Date</label>
-                  <input type="date" required value={recForm.date} onChange={e=>setRecForm({...recForm, date:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent focus:ring-2 focus:ring-emerald-500 outline-none" />
-                </div>
-                <div className="md:col-span-1">
-                  <label className="block text-xs font-medium text-slate-500 mb-1">Vol BE</label>
-                  <input type="number" step="0.1" required value={recForm.be} onChange={e=>setRecForm({...recForm, be:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent focus:ring-2 focus:ring-emerald-500 outline-none" />
-                </div>
-                <div className="md:col-span-1">
-                  <label className="block text-xs font-medium text-slate-500 mb-1">SKU</label>
-                  <input value={recForm.sku} onChange={e=>setRecForm({...recForm, sku:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="Optional" />
-                </div>
-                <div className="md:col-span-1 flex gap-2">
-                  <button type="submit" className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">Save</button>
-                  <button type="button" onClick={()=>setShowRecForm(false)} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg text-sm hover:bg-slate-200 dark:hover:bg-slate-700"><X className="w-4 h-4 mx-auto"/></button>
-                </div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Outlet</label><select required value={recForm.outlet} onChange={e=>setRecForm({...recForm, outlet:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800"><option value="" disabled>Select Outlet</option>{outlets.map(o => <option key={o.id} value={o.name}>{o.name}</option>)}</select></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Sales</label><select required value={recForm.sales} onChange={e=>setRecForm({...recForm, sales:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800"><option value="" disabled>Select Sales</option>{users.map(u => <option key={u.id} value={u.name}>{u.name} ({u.role})</option>)}</select></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Date</label><input type="date" required value={recForm.date} onChange={e=>setRecForm({...recForm, date:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" /></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Vol BE</label><input type="number" step="0.1" required value={recForm.be} onChange={e=>setRecForm({...recForm, be:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" /></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">SKU</label><input value={recForm.sku} onChange={e=>setRecForm({...recForm, sku:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder="Optional" /></div>
+                <div className="md:col-span-1 flex gap-2"><button type="submit" className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">Save</button><button type="button" onClick={()=>setShowRecForm(false)} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg text-sm"><X className="w-4 h-4 mx-auto"/></button></div>
               </form>
             )}
 
@@ -157,16 +139,15 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* OUTLETS TAB */}
         {activeTab === 'outlets' && (
           <div className="space-y-6">
             {showOutletForm && (
               <form onSubmit={(e) => { e.preventDefault(); handleCrud('outlets', editingOutlet ? 'PUT' : 'POST', editingOutlet?.id, outletForm, setOutlets, () => setShowOutletForm(false)); }} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6 grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
-                <div><label className="block text-xs font-medium text-slate-500 mb-1">Name</label><input required value={outletForm.name} onChange={e=>setOutletForm({...outletForm, name:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="Outlet Name" /></div>
-                <div><label className="block text-xs font-medium text-slate-500 mb-1">Type</label><input value={outletForm.type} onChange={e=>setOutletForm({...outletForm, type:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="Warung, Hotel..." /></div>
-                <div><label className="block text-xs font-medium text-slate-500 mb-1">Address</label><input value={outletForm.address} onChange={e=>setOutletForm({...outletForm, address:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="Address" /></div>
-                <div><label className="block text-xs font-medium text-slate-500 mb-1">Contact</label><input value={outletForm.contact_person} onChange={e=>setOutletForm({...outletForm, contact_person:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="Person/Phone" /></div>
-                <div className="flex gap-2"><button type="submit" className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">Save</button><button type="button" onClick={()=>setShowOutletForm(false)} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700"><X className="w-4 h-4 mx-auto"/></button></div>
+                <div><label className="block text-xs font-medium text-slate-500 mb-1">Name</label><input required value={outletForm.name} onChange={e=>setOutletForm({...outletForm, name:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder="Outlet Name" /></div>
+                <div><label className="block text-xs font-medium text-slate-500 mb-1">Type</label><input value={outletForm.type} onChange={e=>setOutletForm({...outletForm, type:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder="Warung, Hotel..." /></div>
+                <div><label className="block text-xs font-medium text-slate-500 mb-1">Address</label><input value={outletForm.address} onChange={e=>setOutletForm({...outletForm, address:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder="Address" /></div>
+                <div><label className="block text-xs font-medium text-slate-500 mb-1">Contact</label><input value={outletForm.contact_person} onChange={e=>setOutletForm({...outletForm, contact_person:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder="Person/Phone" /></div>
+                <div className="flex gap-2"><button type="submit" className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">Save</button><button type="button" onClick={()=>setShowOutletForm(false)} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg"><X className="w-4 h-4 mx-auto"/></button></div>
               </form>
             )}
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6">
@@ -189,15 +170,16 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* USERS TAB */}
         {activeTab === 'users' && (
           <div className="space-y-6">
             {showUserForm && (
-              <form onSubmit={(e) => { e.preventDefault(); handleCrud('users', editingUser ? 'PUT' : 'POST', editingUser?.id, userForm, setUsers, () => setShowUserForm(false)); }} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6 grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-                <div><label className="block text-xs font-medium text-slate-500 mb-1">Full Name</label><input required value={userForm.name} onChange={e=>setUserForm({...userForm, name:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="Name" /></div>
-                <div><label className="block text-xs font-medium text-slate-500 mb-1">Role</label><select value={userForm.role} onChange={e=>setUserForm({...userForm, role:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent focus:ring-2 focus:ring-emerald-500 outline-none"><option value="sales">Sales</option><option value="supervisor">Supervisor</option><option value="admin">Admin</option></select></div>
-                <div><label className="block text-xs font-medium text-slate-500 mb-1">Region</label><input value={userForm.region} onChange={e=>setUserForm({...userForm, region:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="Region" /></div>
-                <div className="flex gap-2"><button type="submit" className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">Save</button><button type="button" onClick={()=>setShowUserForm(false)} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700"><X className="w-4 h-4 mx-auto"/></button></div>
+              <form onSubmit={(e) => { e.preventDefault(); handleCrud('users', editingUser ? 'PUT' : 'POST', editingUser?.id, userForm, setUsers, () => setShowUserForm(false)); }} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6 grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Name</label><input required value={userForm.name} onChange={e=>setUserForm({...userForm, name:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder="Full Name" /></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Email</label><input required type="email" value={userForm.email} onChange={e=>setUserForm({...userForm, email:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder="email@domain.com" /></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Role</label><select value={userForm.role} onChange={e=>setUserForm({...userForm, role:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent"><option value="sales">Sales</option><option value="supervisor">Supervisor</option><option value="admin">Admin</option></select></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Region</label><input value={userForm.region} onChange={e=>setUserForm({...userForm, region:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder="Region" /></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Password</label><input type="password" value={userForm.password} onChange={e=>setUserForm({...userForm, password:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder={editingUser ? "Leave blank to keep current" : "Default: Password123!"} /></div>
+                <div className="md:col-span-1 flex gap-2"><button type="submit" className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">Save</button><button type="button" onClick={()=>setShowUserForm(false)} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg"><X className="w-4 h-4 mx-auto"/></button></div>
               </form>
             )}
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6">
@@ -206,12 +188,15 @@ export default function AdminDashboard() {
                 <button onClick={()=>openUserEdit()} className="flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700"><Plus className="w-4 h-4"/> Add User</button>
               </div>
               <div className="overflow-x-auto"><table className="w-full text-sm text-left min-w-[500px]">
-                <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800"><tr><th className="px-4 py-3">Name</th><th className="px-4 py-3">Role</th><th className="px-4 py-3">Region</th><th className="px-4 py-3">Created</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
+                <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800"><tr><th className="px-4 py-3">Name</th><th className="px-4 py-3">Email</th><th className="px-4 py-3">Role</th><th className="px-4 py-3">Region</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {loading ? <tr><td colSpan="5" className="px-4 py-8 text-center text-slate-400 animate-pulse">Loading...</td></tr> :
                   users.length === 0 ? <tr><td colSpan="5" className="px-4 py-8 text-center text-slate-400">No users found.</td></tr> :
                   users.map(u => (<tr key={u.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                    <td className="px-4 py-3 font-medium">{u.name}</td><td className="px-4 py-3"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${u.role==='admin'?'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-400':u.role==='supervisor'?'bg-blue-100 text-blue-700':'bg-emerald-100 text-emerald-700'}`}>{u.role}</span></td><td className="px-4 py-3 text-slate-500">{u.region||'-'}</td><td className="px-4 py-3 font-mono text-xs text-slate-500">{new Date(u.created_at).toLocaleDateString()}</td>
+                    <td className="px-4 py-3 font-medium">{u.name}</td>
+                    <td className="px-4 py-3 text-slate-500">{u.email || '-'}</td>
+                    <td className="px-4 py-3"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${u.role==='admin'?'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-400':u.role==='supervisor'?'bg-blue-100 text-blue-700':'bg-emerald-100 text-emerald-700'}`}>{u.role}</span></td>
+                    <td className="px-4 py-3 text-slate-500">{u.region||'-'}</td>
                     <td className="px-4 py-3 flex gap-2 justify-end"><button onClick={()=>openUserEdit(u)} className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg"><Edit2 className="w-4 h-4"/></button><button onClick={()=>handleCrud('users','DELETE',u.id,{},setUsers,()=>{})} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg"><Trash2 className="w-4 h-4"/></button></td>
                   </tr>))}
                 </tbody>
