@@ -33,9 +33,11 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/" element={
-          <MobileLayout>
-            <App />
-          </MobileLayout>
+          <ProtectedRoute allowedRoles={['sales', 'supervisor', 'admin']}>
+            <MobileLayout>
+              <App />
+            </MobileLayout>
+          </ProtectedRoute>
         } />
         <Route path="/admin" element={
           <ProtectedRoute allowedRoles={['admin']}>

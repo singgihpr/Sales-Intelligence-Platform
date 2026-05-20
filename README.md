@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT UNIQUE NOT NULL,
   role TEXT NOT NULL CHECK (role IN ('sales', 'supervisor', 'admin')),
   region TEXT DEFAULT '',
+  level TEXT CHECK (level IN ('L2', 'L3')),
   password_hash TEXT NOT NULL,
   netlify_uid TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -53,6 +54,7 @@ CREATE TABLE IF NOT EXISTS outlets (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   type TEXT DEFAULT '',
+  branch_area TEXT DEFAULT '',
   address TEXT DEFAULT '',
   contact_person TEXT DEFAULT '',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -67,6 +69,17 @@ CREATE TABLE IF NOT EXISTS sales_records (
   sku_name TEXT
 );
 
+CREATE TABLE IF NOT EXISTS outlet_assignments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  outlet_id UUID NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
+  salesman_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  unassigned_at TIMESTAMP,
+  assigned_by UUID REFERENCES users(id),
+  notes TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_oa_active ON outlet_assignments(unassigned_at) WHERE unassigned_at IS NULL;
+
 CREATE TABLE IF NOT EXISTS targets (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES users(id),
@@ -74,6 +87,9 @@ CREATE TABLE IF NOT EXISTS targets (
   year INTEGER NOT NULL,
   target_be NUMERIC NOT NULL,
   incentive_rules JSONB DEFAULT '[]'::jsonb,
+  percentage_config JSONB DEFAULT NULL,
+  volume_config JSONB DEFAULT NULL,
+  active_outlets_config JSONB DEFAULT NULL,
   UNIQUE(user_id, month, year)
 );
 ```
@@ -176,10 +192,15 @@ Go to `http://localhost:5173` (or the port Vite reports).
 ├── scripts/
 │   └── seed-admin.js       # Admin user seeder
 ├── src/
+│   ├── components/
+│   │   ├── BonusCards.jsx       # Bonus calculation UI cards
+│   │   ├── SalesDashboard.jsx   # Salesman mobile dashboard
+│   │   ├── SupervisorDashboard.jsx  # Supervisor mobile dashboard
+│   │   └── OutletViews.jsx      # Outlet list & detail views
 │   ├── pages/
 │   │   ├── Login.jsx       # Login page with show/hide password
 │   │   └── AdminDashboard.jsx  # Admin panel
-│   ├── App.jsx             # Sales dashboard
+│   ├── App.jsx             # Main app shell with tab navigation
 │   └── main.jsx            # Router + protected routes
 ├── .env                    # Environment variables (not committed)
 ├── netlify.toml            # Netlify config

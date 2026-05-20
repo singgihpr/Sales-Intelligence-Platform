@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, RefreshCw, Edit2, Trash2, Plus, Users, Database, Store, X, LogOut, ArrowLeft } from 'lucide-react';
+import { Upload, RefreshCw, Edit2, Trash2, Plus, Users, Database, Store, X, LogOut, ArrowLeft, Link2, Target, Award } from 'lucide-react';
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -10,6 +10,9 @@ export default function AdminDashboard() {
   const [records, setRecords] = useState([]);
   const [users, setUsers] = useState([]);
   const [outlets, setOutlets] = useState([]);
+  const [assignments, setAssignments] = useState([]);
+  const [vacantOutlets, setVacantOutlets] = useState([]);
+  const [targets, setTargets] = useState([]);
 
   // Form States
   const [editingRecord, setEditingRecord] = useState(null);
@@ -17,24 +20,47 @@ export default function AdminDashboard() {
   const [showRecForm, setShowRecForm] = useState(false);
 
   const [editingUser, setEditingUser] = useState(null);
-  const [userForm, setUserForm] = useState({ name: '', email: '', role: 'sales', region: '', password: '' });
+  const [userForm, setUserForm] = useState({ name: '', email: '', role: 'sales', region: '', level: 'L2', password: '' });
   const [showUserForm, setShowUserForm] = useState(false);
 
   const [editingOutlet, setEditingOutlet] = useState(null);
-  const [outletForm, setOutletForm] = useState({ name: '', type: '', address: '', contact_person: '' });
+  const [outletForm, setOutletForm] = useState({ name: '', type: '', address: '', contact_person: '', branch_area: '' });
   const [showOutletForm, setShowOutletForm] = useState(false);
+
+  const [showAssignForm, setShowAssignForm] = useState(false);
+  const [assignForm, setAssignForm] = useState({ outlet_id: '', salesman_id: '', notes: '' });
+
+  const [showTargetForm, setShowTargetForm] = useState(false);
+  const [targetForm, setTargetForm] = useState({ user_id: '', month: new Date().getMonth()+1, year: new Date().getFullYear(), target_be: 2000 });
+  const [editingTarget, setEditingTarget] = useState(null);
+
+  const [showVacant, setShowVacant] = useState(false);
+
+  const token = localStorage.getItem('token');
 
   const fetchData = async () => {
     setLoading(true);
-    const endpoints = ['/api?type=records', '/api?type=users', '/api?type=outlets'];
+    const endpoints = ['/api?type=records', '/api?type=users', '/api?type=outlets', '/api?type=assignments', '/api?type=targets'];
     try {
-      const results = await Promise.all(endpoints.map(url => fetch(`/.netlify/functions${url}`).then(r => r.json())));
+      const results = await Promise.all(endpoints.map(url => fetch(`/.netlify/functions${url}`, { headers: { 'Authorization': `Bearer ${token}` } }).then(r => r.json())));
       setRecords(results[0] || []);
       setUsers(results[1] || []);
       setOutlets(results[2] || []);
+      setAssignments(results[3] || []);
+      setTargets(results[4] || []);
     } catch (e) { setMessage('❌ Fetch error'); } finally { setLoading(false); }
   };
+
+  const fetchVacant = async () => {
+    try {
+      const res = await fetch(`/.netlify/functions/api?type=assignments&mode=vacant`, { headers: { 'Authorization': `Bearer ${token}` } });
+      const data = await res.json();
+      setVacantOutlets(data || []);
+    } catch (e) { console.error(e); }
+  };
+
   useEffect(() => { fetchData(); }, []);
+  useEffect(() => { if (showVacant) fetchVacant(); }, [showVacant]);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -45,7 +71,7 @@ export default function AdminDashboard() {
   const handleCrud = async (type, method, id, form, setList, resetState) => {
     try {
       const url = id ? `/.netlify/functions/api?type=${type}&id=${id}` : `/.netlify/functions/api?type=${type}`;
-      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
+      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(form) });
       if (!res.ok) throw new Error(await res.text());
       fetchData();
       resetState();
@@ -66,14 +92,25 @@ export default function AdminDashboard() {
   };
 
   const openRecordEdit = (r = null) => { setEditingRecord(r); setRecForm(r || { outlet: '', sales: '', date: '', be: '', sku: '' }); setShowRecForm(true); };
-  const openUserEdit = (u = null) => { setEditingUser(u); setUserForm(u || { name: '', email: '', role: 'sales', region: '', password: '' }); setShowUserForm(true); };
-  const openOutletEdit = (o = null) => { setEditingOutlet(o); setOutletForm(o || { name: '', type: '', address: '', contact_person: '' }); setShowOutletForm(true); };
+  const openUserEdit = (u = null) => { setEditingUser(u); setUserForm(u || { name: '', email: '', role: 'sales', region: '', level: 'L2', password: '' }); setShowUserForm(true); };
+  const openOutletEdit = (o = null) => { setEditingOutlet(o); setOutletForm(o || { name: '', type: '', address: '', contact_person: '', branch_area: '' }); setShowOutletForm(true); };
+  const openTargetEdit = (t = null) => {
+    setEditingTarget(t);
+    setTargetForm(t ? { user_id: t.user_id, month: t.month, year: t.year, target_be: t.target_be } : { user_id: '', month: new Date().getMonth()+1, year: new Date().getFullYear(), target_be: 2000 });
+    setShowTargetForm(true);
+  };
 
   const tabs = [
     { id: 'records', label: 'Data Records', icon: Database },
     { id: 'outlets', label: 'Outlet Management', icon: Store },
-    { id: 'users', label: 'User Management', icon: Users }
+    { id: 'users', label: 'User Management', icon: Users },
+    { id: 'assignments', label: 'Assignments', icon: Link2 },
+    { id: 'targets', label: 'Bonus Targets', icon: Target }
   ];
+
+  const salesUsers = users.filter(u => u.role === 'sales');
+
+  const formatRp = (n) => 'Rp ' + (Number(n)||0).toLocaleString('id-ID');
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
@@ -85,9 +122,9 @@ export default function AdminDashboard() {
             <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Admin Dashboard</h1>
           </div>
           <div className="flex items-center gap-3 w-full lg:w-auto">
-            <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg w-full lg:w-auto">
+            <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg w-full lg:w-auto overflow-x-auto">
               {tabs.map(t => (
-                <button key={t.id} onClick={() => setActiveTab(t.id)} className={`flex-1 lg:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === t.id ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white' : 'text-slate-500 hover:text-slate-700'}`}>
+                <button key={t.id} onClick={() => setActiveTab(t.id)} className={`flex-1 lg:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all whitespace-nowrap ${activeTab === t.id ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white' : 'text-slate-500 hover:text-slate-700'}`}>
                   <t.icon className="w-4 h-4" /> {t.label}
                 </button>
               ))}
@@ -142,12 +179,13 @@ export default function AdminDashboard() {
         {activeTab === 'outlets' && (
           <div className="space-y-6">
             {showOutletForm && (
-              <form onSubmit={(e) => { e.preventDefault(); handleCrud('outlets', editingOutlet ? 'PUT' : 'POST', editingOutlet?.id, outletForm, setOutlets, () => setShowOutletForm(false)); }} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6 grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
-                <div><label className="block text-xs font-medium text-slate-500 mb-1">Name</label><input required value={outletForm.name} onChange={e=>setOutletForm({...outletForm, name:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder="Outlet Name" /></div>
-                <div><label className="block text-xs font-medium text-slate-500 mb-1">Type</label><input value={outletForm.type} onChange={e=>setOutletForm({...outletForm, type:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder="Warung, Hotel..." /></div>
-                <div><label className="block text-xs font-medium text-slate-500 mb-1">Address</label><input value={outletForm.address} onChange={e=>setOutletForm({...outletForm, address:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder="Address" /></div>
-                <div><label className="block text-xs font-medium text-slate-500 mb-1">Contact</label><input value={outletForm.contact_person} onChange={e=>setOutletForm({...outletForm, contact_person:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder="Person/Phone" /></div>
-                <div className="flex gap-2"><button type="submit" className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">Save</button><button type="button" onClick={()=>setShowOutletForm(false)} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg"><X className="w-4 h-4 mx-auto"/></button></div>
+              <form onSubmit={(e) => { e.preventDefault(); handleCrud('outlets', editingOutlet ? 'PUT' : 'POST', editingOutlet?.id, outletForm, setOutlets, () => setShowOutletForm(false)); }} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6 grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Name</label><input required value={outletForm.name} onChange={e=>setOutletForm({...outletForm, name:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder="Outlet Name" /></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Type</label><input value={outletForm.type} onChange={e=>setOutletForm({...outletForm, type:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder="Warung, Hotel..." /></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Branch Area</label><input value={outletForm.branch_area} onChange={e=>setOutletForm({...outletForm, branch_area:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder="Jakarta Selatan" /></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Address</label><input value={outletForm.address} onChange={e=>setOutletForm({...outletForm, address:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder="Address" /></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Contact</label><input value={outletForm.contact_person} onChange={e=>setOutletForm({...outletForm, contact_person:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder="Person/Phone" /></div>
+                <div className="md:col-span-1 flex gap-2"><button type="submit" className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">Save</button><button type="button" onClick={()=>setShowOutletForm(false)} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg"><X className="w-4 h-4 mx-auto"/></button></div>
               </form>
             )}
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6">
@@ -155,13 +193,13 @@ export default function AdminDashboard() {
                 <h2 className="text-lg font-bold">Outlet Database</h2>
                 <button onClick={()=>openOutletEdit()} className="flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700"><Plus className="w-4 h-4"/> Add Outlet</button>
               </div>
-              <div className="overflow-x-auto"><table className="w-full text-sm text-left min-w-[600px]">
-                <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800"><tr><th className="px-4 py-3">Name</th><th className="px-4 py-3">Type</th><th className="px-4 py-3">Address</th><th className="px-4 py-3">Contact</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
+              <div className="overflow-x-auto"><table className="w-full text-sm text-left min-w-[700px]">
+                <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800"><tr><th className="px-4 py-3">Name</th><th className="px-4 py-3">Type</th><th className="px-4 py-3">Branch Area</th><th className="px-4 py-3">Address</th><th className="px-4 py-3">Contact</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {loading ? <tr><td colSpan="5" className="px-4 py-8 text-center text-slate-400 animate-pulse">Loading...</td></tr> :
-                  outlets.length === 0 ? <tr><td colSpan="5" className="px-4 py-8 text-center text-slate-400">No outlets found.</td></tr> :
+                  {loading ? <tr><td colSpan="6" className="px-4 py-8 text-center text-slate-400 animate-pulse">Loading...</td></tr> :
+                  outlets.length === 0 ? <tr><td colSpan="6" className="px-4 py-8 text-center text-slate-400">No outlets found.</td></tr> :
                   outlets.map(o => (<tr key={o.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                    <td className="px-4 py-3 font-medium">{o.name}</td><td className="px-4 py-3">{o.type||'-'}</td><td className="px-4 py-3 text-slate-500">{o.address||'-'}</td><td className="px-4 py-3 text-slate-500">{o.contact_person||'-'}</td>
+                    <td className="px-4 py-3 font-medium">{o.name}</td><td className="px-4 py-3">{o.type||'-'}</td><td className="px-4 py-3">{o.branch_area||'-'}</td><td className="px-4 py-3 text-slate-500">{o.address||'-'}</td><td className="px-4 py-3 text-slate-500">{o.contact_person||'-'}</td>
                     <td className="px-4 py-3 flex gap-2 justify-end"><button onClick={()=>openOutletEdit(o)} className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg"><Edit2 className="w-4 h-4"/></button><button onClick={()=>handleCrud('outlets','DELETE',o.id,{},setOutlets,()=>{})} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg"><Trash2 className="w-4 h-4"/></button></td>
                   </tr>))}
                 </tbody>
@@ -173,10 +211,11 @@ export default function AdminDashboard() {
         {activeTab === 'users' && (
           <div className="space-y-6">
             {showUserForm && (
-              <form onSubmit={(e) => { e.preventDefault(); handleCrud('users', editingUser ? 'PUT' : 'POST', editingUser?.id, userForm, setUsers, () => setShowUserForm(false)); }} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6 grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
+              <form onSubmit={(e) => { e.preventDefault(); handleCrud('users', editingUser ? 'PUT' : 'POST', editingUser?.id, userForm, setUsers, () => setShowUserForm(false)); }} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6 grid grid-cols-1 md:grid-cols-7 gap-4 items-end">
                 <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Name</label><input required value={userForm.name} onChange={e=>setUserForm({...userForm, name:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder="Full Name" /></div>
                 <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Email</label><input required type="email" value={userForm.email} onChange={e=>setUserForm({...userForm, email:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder="email@domain.com" /></div>
                 <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Role</label><select value={userForm.role} onChange={e=>setUserForm({...userForm, role:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent"><option value="sales">Sales</option><option value="supervisor">Supervisor</option><option value="admin">Admin</option></select></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Level</label><select value={userForm.level||''} onChange={e=>setUserForm({...userForm, level:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent"><option value="">-</option><option value="L2">L2</option><option value="L3">L3</option></select></div>
                 <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Region</label><input value={userForm.region} onChange={e=>setUserForm({...userForm, region:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder="Region" /></div>
                 <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Password</label><input type="password" value={userForm.password} onChange={e=>setUserForm({...userForm, password:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder={editingUser ? "Leave blank to keep current" : "Default: Password123!"} /></div>
                 <div className="md:col-span-1 flex gap-2"><button type="submit" className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">Save</button><button type="button" onClick={()=>setShowUserForm(false)} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg"><X className="w-4 h-4 mx-auto"/></button></div>
@@ -187,18 +226,114 @@ export default function AdminDashboard() {
                 <h2 className="text-lg font-bold">Team Members</h2>
                 <button onClick={()=>openUserEdit()} className="flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700"><Plus className="w-4 h-4"/> Add User</button>
               </div>
-              <div className="overflow-x-auto"><table className="w-full text-sm text-left min-w-[500px]">
-                <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800"><tr><th className="px-4 py-3">Name</th><th className="px-4 py-3">Email</th><th className="px-4 py-3">Role</th><th className="px-4 py-3">Region</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
+              <div className="overflow-x-auto"><table className="w-full text-sm text-left min-w-[700px]">
+                <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800"><tr><th className="px-4 py-3">Name</th><th className="px-4 py-3">Email</th><th className="px-4 py-3">Role</th><th className="px-4 py-3">Level</th><th className="px-4 py-3">Region</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {loading ? <tr><td colSpan="5" className="px-4 py-8 text-center text-slate-400 animate-pulse">Loading...</td></tr> :
-                  users.length === 0 ? <tr><td colSpan="5" className="px-4 py-8 text-center text-slate-400">No users found.</td></tr> :
+                  {loading ? <tr><td colSpan="6" className="px-4 py-8 text-center text-slate-400 animate-pulse">Loading...</td></tr> :
+                  users.length === 0 ? <tr><td colSpan="6" className="px-4 py-8 text-center text-slate-400">No users found.</td></tr> :
                   users.map(u => (<tr key={u.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                     <td className="px-4 py-3 font-medium">{u.name}</td>
                     <td className="px-4 py-3 text-slate-500">{u.email || '-'}</td>
                     <td className="px-4 py-3"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${u.role==='admin'?'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-400':u.role==='supervisor'?'bg-blue-100 text-blue-700':'bg-emerald-100 text-emerald-700'}`}>{u.role}</span></td>
+                    <td className="px-4 py-3 text-slate-500">{u.level||'-'}</td>
                     <td className="px-4 py-3 text-slate-500">{u.region||'-'}</td>
                     <td className="px-4 py-3 flex gap-2 justify-end"><button onClick={()=>openUserEdit(u)} className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg"><Edit2 className="w-4 h-4"/></button><button onClick={()=>handleCrud('users','DELETE',u.id,{},setUsers,()=>{})} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg"><Trash2 className="w-4 h-4"/></button></td>
                   </tr>))}
+                </tbody>
+              </table></div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'assignments' && (
+          <div className="space-y-6">
+            {showAssignForm && (
+              <form onSubmit={(e) => { e.preventDefault(); handleCrud('assignments', 'POST', null, assignForm, setAssignments, () => { setShowAssignForm(false); setAssignForm({ outlet_id: '', salesman_id: '', notes: '' }); }); }} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6 grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Outlet</label><select required value={assignForm.outlet_id} onChange={e=>setAssignForm({...assignForm, outlet_id:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800"><option value="" disabled>Select Outlet</option>{outlets.map(o => <option key={o.id} value={o.id}>{o.name} {o.branch_area ? `(${o.branch_area})` : ''}</option>)}</select></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Salesman</label><select value={assignForm.salesman_id} onChange={e=>setAssignForm({...assignForm, salesman_id:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800"><option value="">Vacant</option>{salesUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}</select></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Notes</label><input value={assignForm.notes} onChange={e=>setAssignForm({...assignForm, notes:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder="Optional notes" /></div>
+                <div className="md:col-span-1 flex gap-2"><button type="submit" className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">Assign</button><button type="button" onClick={()=>setShowAssignForm(false)} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg"><X className="w-4 h-4 mx-auto"/></button></div>
+              </form>
+            )}
+            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+                <h2 className="text-lg font-bold">Outlet Assignments</h2>
+                <div className="flex gap-2">
+                  <button onClick={()=>setShowVacant(!showVacant)} className={`px-3 py-2 rounded-lg text-sm font-medium ${showVacant?'bg-amber-100 text-amber-700':'bg-slate-100 text-slate-600'}`}>{showVacant?'Hide Vacant':'Show Vacant'}</button>
+                  <button onClick={()=>openOutletEdit()} className="flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700"><Plus className="w-4 h-4"/> Assign Outlet</button>
+                </div>
+              </div>
+              {showVacant && (
+                <div className="mb-6">
+                  <h3 className="text-sm font-bold text-amber-700 mb-2">Vacant Outlets (No Salesman Assigned)</h3>
+                  <div className="overflow-x-auto"><table className="w-full text-sm text-left min-w-[600px]">
+                    <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800"><tr><th className="px-4 py-3">Name</th><th className="px-4 py-3">Branch Area</th><th className="px-4 py-3">Type</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {vacantOutlets.length === 0 ? <tr><td colSpan="4" className="px-4 py-4 text-center text-slate-400">No vacant outlets.</td></tr> :
+                      vacantOutlets.map(o => (<tr key={o.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                        <td className="px-4 py-3 font-medium">{o.name}</td><td className="px-4 py-3">{o.branch_area||'-'}</td><td className="px-4 py-3">{o.type||'-'}</td>
+                        <td className="px-4 py-3 text-right"><button onClick={()=>{ setAssignForm({ outlet_id: o.id, salesman_id: '', notes: '' }); setShowAssignForm(true); }} className="px-3 py-1.5 bg-emerald-600 text-white rounded-md text-xs font-medium hover:bg-emerald-700">Assign</button></td>
+                      </tr>))}
+                    </tbody>
+                  </table></div>
+                </div>
+              )}
+              <div className="overflow-x-auto"><table className="w-full text-sm text-left min-w-[700px]">
+                <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800"><tr><th className="px-4 py-3">Outlet</th><th className="px-4 py-3">Branch Area</th><th className="px-4 py-3">Salesman</th><th className="px-4 py-3">Assigned At</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {loading ? <tr><td colSpan="5" className="px-4 py-8 text-center text-slate-400 animate-pulse">Loading...</td></tr> :
+                  assignments.length === 0 ? <tr><td colSpan="5" className="px-4 py-8 text-center text-slate-400">No active assignments.</td></tr> :
+                  assignments.map(a => (<tr key={a.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                    <td className="px-4 py-3 font-medium">{a.outlet_name}</td><td className="px-4 py-3">{a.branch_area||'-'}</td><td className="px-4 py-3">{a.salesman_name || <span className="text-amber-600 font-bold">Vacant</span>}</td><td className="px-4 py-3 text-slate-500">{a.assigned_at ? new Date(a.assigned_at).toLocaleDateString('id-ID') : '-'}</td>
+                    <td className="px-4 py-3 flex gap-2 justify-end"><button onClick={()=>handleCrud('assignments','PUT',a.id,{},setAssignments,()=>{})} className="p-1.5 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded-lg" title="Unassign"><Link2 className="w-4 h-4"/></button><button onClick={()=>handleCrud('assignments','DELETE',a.id,{},setAssignments,()=>{})} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg"><Trash2 className="w-4 h-4"/></button></td>
+                  </tr>))}
+                </tbody>
+              </table></div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'targets' && (
+          <div className="space-y-6">
+            {showTargetForm && (
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                const body = { ...targetForm, level: salesUsers.find(u => u.id === targetForm.user_id)?.level || 'L2' };
+                handleCrud('targets', editingTarget ? 'PUT' : 'POST', editingTarget?.id, body, setTargets, () => { setShowTargetForm(false); setTargetForm({ user_id: '', month: new Date().getMonth()+1, year: new Date().getFullYear(), target_be: 2000 }); setEditingTarget(null); });
+              }} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6 grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Salesman</label><select required value={targetForm.user_id} onChange={e=>setTargetForm({...targetForm, user_id:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800"><option value="" disabled>Select Salesman</option>{salesUsers.map(u => <option key={u.id} value={u.id}>{u.name} ({u.level||'-'})</option>)}</select></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Month</label><input type="number" min="1" max="12" required value={targetForm.month} onChange={e=>setTargetForm({...targetForm, month:Number(e.target.value)})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" /></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Year</label><input type="number" min="2024" max="2100" required value={targetForm.year} onChange={e=>setTargetForm({...targetForm, year:Number(e.target.value)})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" /></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Target BE</label><input type="number" step="0.1" required value={targetForm.target_be} onChange={e=>setTargetForm({...targetForm, target_be:Number(e.target.value)})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" /></div>
+                <div className="md:col-span-1 flex gap-2"><button type="submit" className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">Save</button><button type="button" onClick={()=>setShowTargetForm(false)} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg"><X className="w-4 h-4 mx-auto"/></button></div>
+              </form>
+            )}
+            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+                <h2 className="text-lg font-bold">Bonus Targets & Configurations</h2>
+                <button onClick={()=>openTargetEdit()} className="flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700"><Plus className="w-4 h-4"/> Add Target</button>
+              </div>
+              <div className="overflow-x-auto"><table className="w-full text-sm text-left min-w-[700px]">
+                <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800"><tr><th className="px-4 py-3">Salesman</th><th className="px-4 py-3">Month</th><th className="px-4 py-3">Year</th><th className="px-4 py-3">Target BE</th><th className="px-4 py-3">Percentage</th><th className="px-4 py-3">Volume</th><th className="px-4 py-3">Active Outlets</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {loading ? <tr><td colSpan="8" className="px-4 py-8 text-center text-slate-400 animate-pulse">Loading...</td></tr> :
+                  targets.length === 0 ? <tr><td colSpan="8" className="px-4 py-8 text-center text-slate-400">No targets configured.</td></tr> :
+                  targets.map(t => {
+                    const salesman = users.find(u => u.id === t.user_id);
+                    const pc = t.percentage_config || {};
+                    const vc = (t.volume_config || {}).tiers || [];
+                    const ac = t.active_outlets_config || {};
+                    return (<tr key={t.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                      <td className="px-4 py-3 font-medium">{salesman?.name || t.user_id}</td>
+                      <td className="px-4 py-3">{t.month}</td>
+                      <td className="px-4 py-3">{t.year}</td>
+                      <td className="px-4 py-3 font-bold text-emerald-600">{t.target_be}</td>
+                      <td className="px-4 py-3 text-xs text-slate-500">{pc.base_reward ? formatRp(pc.base_reward) : '-'}</td>
+                      <td className="px-4 py-3 text-xs text-slate-500">{vc.length ? vc.map(v=>`${v.threshold}BE`).join(', ') : '-'}</td>
+                      <td className="px-4 py-3 text-xs text-slate-500">{ac.base_reward ? formatRp(ac.base_reward) : '-'}</td>
+                      <td className="px-4 py-3 flex gap-2 justify-end"><button onClick={()=>openTargetEdit(t)} className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg"><Edit2 className="w-4 h-4"/></button><button onClick={()=>handleCrud('targets','DELETE',t.id,{},setTargets,()=>{})} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg"><Trash2 className="w-4 h-4"/></button></td>
+                    </tr>);
+                  })}
                 </tbody>
               </table></div>
             </div>

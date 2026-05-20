@@ -18,38 +18,291 @@ const parseExcelDate = (val) => {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 };
 
-const transformToFrontend = async () => {
-  const currentMonth = new Date().getMonth() + 1;
-  const currentYear = new Date().getFullYear();
-  const userId = process.env.DEFAULT_USER_ID;
-  if (!userId) throw new Error('DEFAULT_USER_ID missing');
+const verifyToken = (event) => {
+  const authHeader = event.headers['authorization'] || event.headers['Authorization'] || '';
+  const token = authHeader.replace('Bearer ', '');
+  if (!token) return null;
+  try {
+    return jwt.verify(token, JWT_SECRET);
+  } catch { return null; }
+};
 
-  const targetRow = await sql`SELECT target_be, incentive_rules FROM targets WHERE user_id = ${userId} AND month = ${currentMonth} AND year = ${currentYear}`;
-  if (!targetRow?.length) throw new Error('No target configured');
+// Default bonus configurations based on backlog rules
+const getDefaultPercentageConfig = (level) => {
+  const base = level === 'L3' ? 1200000 : 1000000;
+  return {
+    base_reward: base,
+    tiers: [
+      { threshold: 50, reward: Math.round(base * 0.50), label: '50%' },
+      { threshold: 100, reward: base, label: '100%' },
+      { threshold: 110, reward: Math.round(base * 1.25), label: '110%' }
+    ]
+  };
+};
 
-  const salesSum = await sql`SELECT COALESCE(SUM(volume_be), 0) as total FROM sales_records WHERE record_date >= ${`${currentYear}-${String(currentMonth).padStart(2,'0')}-01`}`;
+const getDefaultVolumeConfig = () => ({
+  tiers: [
+    { threshold: 1500, reward: 250000, label: 'Tier 1' },
+    { threshold: 2500, reward: 500000, label: 'Tier 2' },
+    { threshold: 3500, reward: 750000, label: 'Tier 3' }
+  ]
+});
+
+const getDefaultActiveOutletsConfig = (level) => {
+  const base = level === 'L3' ? 400000 : 300000;
+  return {
+    base_reward: base,
+    tiers: [
+      { threshold: 90, reward: Math.round(base * 0.50), label: '90%' },
+      { threshold: 100, reward: base, label: '100%' },
+      { threshold: 125, reward: Math.round(base * 1.25), label: '125%' }
+    ]
+  };
+};
+
+const calculatePercentageBonus = (currentBE, targetBE, config) => {
+  if (!targetBE || targetBE <= 0 || !config) return { attainment: 0, bonus: 0, tier: null };
+  const attainment = (currentBE / targetBE) * 100;
+  let activeTier = null;
+  for (const tier of config.tiers) {
+    if (attainment >= tier.threshold) activeTier = tier;
+  }
+  return { attainment, bonus: activeTier ? activeTier.reward : 0, tier: activeTier };
+};
+
+const calculateVolumeBonus = (currentBE, config) => {
+  if (!config || !config.tiers) return { bonus: 0, tier: null };
+  let activeTier = null;
+  for (const tier of config.tiers) {
+    if (currentBE >= tier.threshold) activeTier = tier;
+  }
+  return { bonus: activeTier ? activeTier.reward : 0, tier: activeTier };
+};
+
+const calculateActiveOutletsBonus = (totalAssigned, activeCount, config) => {
+  if (!totalAssigned || totalAssigned === 0 || !config) return { percent: 0, bonus: 0, tier: null };
+  const percent = (activeCount / totalAssigned) * 100;
+  let activeTier = null;
+  for (const tier of config.tiers) {
+    if (percent >= tier.threshold) activeTier = tier;
+  }
+  return { percent, bonus: activeTier ? activeTier.reward : 0, tier: activeTier };
+};
+
+const getCurrentMonthRange = () => {
+  const now = new Date();
+  const month = now.getMonth() + 1;
+  const year = now.getFullYear();
+  const start = `${year}-${String(month).padStart(2, '0')}-01`;
+  const end = `${year}-${String(month).padStart(2, '0')}-31`;
+  return { month, year, start, end };
+};
+
+const getUserDashboardData = async (userId) => {
+  const { month, year, start, end } = getCurrentMonthRange();
+
+  const userRows = await sql`SELECT id, name, email, role, region, level FROM users WHERE id = ${userId}`;
+  if (!userRows.length) throw new Error('User not found');
+  const user = userRows[0];
+
+  const targetRows = await sql`SELECT target_be, percentage_config, volume_config, active_outlets_config FROM targets WHERE user_id = ${userId} AND month = ${month} AND year = ${year}`;
+  let targetData = targetRows[0] || null;
+
+  if (!targetData) {
+    // Auto-create defaults
+    const defaultTarget = user.level === 'L3' ? 3500 : 3499;
+    const pc = getDefaultPercentageConfig(user.level);
+    const vc = getDefaultVolumeConfig();
+    const ac = getDefaultActiveOutletsConfig(user.level);
+    const insertRes = await sql`
+      INSERT INTO targets (id, user_id, month, year, target_be, percentage_config, volume_config, active_outlets_config)
+      VALUES (gen_random_uuid(), ${userId}, ${month}, ${year}, ${defaultTarget}, ${JSON.stringify(pc)}::jsonb, ${JSON.stringify(vc)}::jsonb, ${JSON.stringify(ac)}::jsonb)
+      ON CONFLICT (user_id, month, year) DO UPDATE SET target_be = EXCLUDED.target_be
+      RETURNING target_be, percentage_config, volume_config, active_outlets_config
+    `;
+    targetData = insertRes[0];
+  }
+
+  const salesSum = await sql`SELECT COALESCE(SUM(volume_be), 0) as total FROM sales_records WHERE sales_id = ${userId} AND record_date >= ${start}`;
+  const currentBE = parseFloat(salesSum[0].total);
+  const targetBE = parseFloat(targetData.target_be);
+
+  // Percentage bonus
+  const percentageResult = calculatePercentageBonus(currentBE, targetBE, targetData.percentage_config);
+
+  // Volume bonus
+  const volumeResult = calculateVolumeBonus(currentBE, targetData.volume_config);
+
+  // Active outlets
+  const assignedRows = await sql`
+    SELECT o.id, EXISTS(
+      SELECT 1 FROM sales_records sr WHERE sr.outlet_id = o.id AND sr.record_date >= ${start} AND sr.record_date <= ${end}
+    ) as is_active
+    FROM outlets o
+    INNER JOIN outlet_assignments oa ON oa.outlet_id = o.id AND oa.salesman_id = ${userId} AND oa.unassigned_at IS NULL
+  `;
+  const totalAssigned = assignedRows.length;
+  const activeCount = assignedRows.filter(r => r.is_active).length;
+  const activeResult = calculateActiveOutletsBonus(totalAssigned, activeCount, targetData.active_outlets_config);
+
+  const totalBonus = percentageResult.bonus + volumeResult.bonus + activeResult.bonus;
+
+  // SKU performance
+  const skuRows = await sql`
+    SELECT sku_name, SUM(volume_be) as volume FROM sales_records
+    WHERE sales_id = ${userId} AND record_date >= ${start} AND sku_name IS NOT NULL AND sku_name <> ''
+    GROUP BY sku_name ORDER BY volume DESC LIMIT 5
+  `;
+
+  // Outlets data
+  const outletRows = await sql`
+    SELECT o.id, o.name, o.type, o.address, o.contact_person, o.branch_area,
+           COALESCE(SUM(CASE WHEN sr.record_date >= ${start} THEN sr.volume_be ELSE 0 END), 0) as beMonth,
+           MAX(sr.record_date) as last_order
+    FROM outlets o
+    LEFT JOIN outlet_assignments oa ON oa.outlet_id = o.id AND oa.salesman_id = ${userId} AND oa.unassigned_at IS NULL
+    LEFT JOIN sales_records sr ON sr.outlet_id = o.id
+    WHERE oa.id IS NOT NULL
+    GROUP BY o.id, o.name, o.type, o.address, o.contact_person, o.branch_area
+  `;
+
   const daysElapsed = Math.min(new Date().getDate(), 22);
 
-  const outlets = await sql`
-    SELECT o.id, o.name, o.type, o.address, o.contact_person, 
-           COALESCE(SUM(CASE WHEN EXTRACT(MONTH FROM sr.record_date) = ${currentMonth} THEN sr.volume_be ELSE 0 END), 0) as beMonth,
+  return {
+    user,
+    dashboardStats: {
+      monthlyTargetBE: targetBE,
+      currentBE,
+      daysElapsed,
+      totalWorkingDays: 22,
+      percentageConfig: targetData.percentage_config,
+      volumeConfig: targetData.volume_config,
+      activeOutletsConfig: targetData.active_outlets_config
+    },
+    bonusSummary: {
+      percentage: percentageResult,
+      volume: volumeResult,
+      activeOutlets: { ...activeResult, activeCount, totalAssigned },
+      total: totalBonus
+    },
+    outlets: outletRows.map(o => {
+      const daysSince = o.last_order ? Math.floor((Date.now() - new Date(o.last_order)) / 86400000) : 99;
+      return {
+        id: o.id, name: o.name, type: o.type, address: o.address, contact: o.contact_person, branchArea: o.branch_area || '',
+        beMonth: parseFloat(o.bemonth), health: Math.max(0, 100 - daysSince * 2),
+        lastOrder: daysSince === 0 ? 'Today' : `${daysSince} days ago`,
+        alert: daysSince > 7 ? 'Risk of Churn' : null
+      };
+    }),
+    skuPerformance: skuRows.map(r => ({ name: r.sku_name, volume: parseFloat(r.volume), trend: 0 })),
+    daysElapsed
+  };
+};
+
+const getSupervisorDashboardData = async (supervisorId) => {
+  const { month, year, start, end } = getCurrentMonthRange();
+
+  // Get supervisor's region
+  const supRows = await sql`SELECT region FROM users WHERE id = ${supervisorId}`;
+  const region = supRows[0]?.region || '';
+
+  // Team members in same region (all sales + supervisors if needed)
+  const teamRows = await sql`
+    SELECT id, name, email, role, region, level FROM users
+    WHERE role = 'sales' AND (region = ${region} OR ${region} = '')
+    ORDER BY name
+  `;
+
+  const teamData = [];
+  let totalTeamBE = 0;
+  let totalTarget = 0;
+
+  for (const member of teamRows) {
+    const tRows = await sql`SELECT target_be, percentage_config, volume_config, active_outlets_config FROM targets WHERE user_id = ${member.id} AND month = ${month} AND year = ${year}`;
+    let targetData = tRows[0];
+    if (!targetData) {
+      const defaultTarget = member.level === 'L3' ? 3500 : 3499;
+      const pc = getDefaultPercentageConfig(member.level);
+      const vc = getDefaultVolumeConfig();
+      const ac = getDefaultActiveOutletsConfig(member.level);
+      const insertRes = await sql`
+        INSERT INTO targets (id, user_id, month, year, target_be, percentage_config, volume_config, active_outlets_config)
+        VALUES (gen_random_uuid(), ${member.id}, ${month}, ${year}, ${defaultTarget}, ${JSON.stringify(pc)}::jsonb, ${JSON.stringify(vc)}::jsonb, ${JSON.stringify(ac)}::jsonb)
+        ON CONFLICT (user_id, month, year) DO UPDATE SET target_be = EXCLUDED.target_be
+        RETURNING target_be, percentage_config, volume_config, active_outlets_config
+      `;
+      targetData = insertRes[0];
+    }
+
+    const salesSum = await sql`SELECT COALESCE(SUM(volume_be), 0) as total FROM sales_records WHERE sales_id = ${member.id} AND record_date >= ${start}`;
+    const currentBE = parseFloat(salesSum[0].total);
+    const targetBE = parseFloat(targetData.target_be);
+
+    const percentageResult = calculatePercentageBonus(currentBE, targetBE, targetData.percentage_config);
+    const volumeResult = calculateVolumeBonus(currentBE, targetData.volume_config);
+
+    const assignedRows = await sql`
+      SELECT o.id, EXISTS(
+        SELECT 1 FROM sales_records sr WHERE sr.outlet_id = o.id AND sr.record_date >= ${start} AND sr.record_date <= ${end}
+      ) as is_active
+      FROM outlets o
+      INNER JOIN outlet_assignments oa ON oa.outlet_id = o.id AND oa.salesman_id = ${member.id} AND oa.unassigned_at IS NULL
+    `;
+    const totalAssigned = assignedRows.length;
+    const activeCount = assignedRows.filter(r => r.is_active).length;
+    const activeResult = calculateActiveOutletsBonus(totalAssigned, activeCount, targetData.active_outlets_config);
+
+    const totalBonus = percentageResult.bonus + volumeResult.bonus + activeResult.bonus;
+    const attainment = targetBE > 0 ? Math.round((currentBE / targetBE) * 100) : 0;
+
+    totalTeamBE += currentBE;
+    totalTarget += targetBE;
+
+    teamData.push({
+      ...member,
+      currentBE,
+      targetBE,
+      attainment,
+      totalBonus,
+      totalAssigned,
+      activeCount,
+      percentageResult,
+      volumeResult,
+      activeResult
+    });
+  }
+
+  const vacantCount = await sql`
+    SELECT COUNT(*) as cnt FROM outlets o
+    WHERE NOT EXISTS (
+      SELECT 1 FROM outlet_assignments oa WHERE oa.outlet_id = o.id AND oa.unassigned_at IS NULL
+    )
+  `;
+
+  const outletRows = await sql`
+    SELECT o.id, o.name, o.type, o.address, o.contact_person, o.branch_area,
+           u.name as salesman_name,
+           COALESCE(SUM(CASE WHEN sr.record_date >= ${start} THEN sr.volume_be ELSE 0 END), 0) as beMonth,
            MAX(sr.record_date) as last_order
-    FROM outlets o LEFT JOIN sales_records sr ON o.id = sr.outlet_id
-    GROUP BY o.id, o.name, o.type, o.address, o.contact_person
+    FROM outlets o
+    LEFT JOIN outlet_assignments oa ON oa.outlet_id = o.id AND oa.unassigned_at IS NULL
+    LEFT JOIN users u ON oa.salesman_id = u.id
+    LEFT JOIN sales_records sr ON sr.outlet_id = o.id
+    GROUP BY o.id, o.name, o.type, o.address, o.contact_person, o.branch_area, u.name
   `;
 
   return {
-    dashboardStats: {
-      monthlyTargetBE: parseFloat(targetRow[0].target_be),
-      currentBE: parseFloat(salesSum[0].total),
-      daysElapsed,
-      totalWorkingDays: 22,
-      incentiveTiers: targetRow[0].incentive_rules
+    team: teamData,
+    teamStats: {
+      totalTeamBE,
+      totalTarget,
+      teamAttainment: totalTarget > 0 ? Math.round((totalTeamBE / totalTarget) * 100) : 0,
+      vacantOutlets: parseInt(vacantCount[0].cnt)
     },
-    outlets: outlets.map(o => {
+    outlets: outletRows.map(o => {
       const daysSince = o.last_order ? Math.floor((Date.now() - new Date(o.last_order)) / 86400000) : 99;
       return {
-        id: o.id, name: o.name, type: o.type, address: o.address, contact: o.contact_person,
+        id: o.id, name: o.name, type: o.type, address: o.address, contact: o.contact_person, branchArea: o.branch_area || '',
         beMonth: parseFloat(o.bemonth), health: Math.max(0, 100 - daysSince * 2),
         lastOrder: daysSince === 0 ? 'Today' : `${daysSince} days ago`,
         alert: daysSince > 7 ? 'Risk of Churn' : null
@@ -60,7 +313,8 @@ const transformToFrontend = async () => {
 
 const _handler = async (event, context) => {
   const params = event.queryStringParameters || {};
-  const type = params.type || 'records';
+  const user = verifyToken(event);
+  const type = params.type || (user ? null : 'records');
   const id = params.id;
   const isJson = event.headers['content-type']?.includes('application/json');
 
@@ -68,27 +322,27 @@ const _handler = async (event, context) => {
     // --- AUTH ---
     if (type === 'auth' && event.httpMethod === 'POST') {
       const { email, password } = JSON.parse(event.body);
-      const user = await sql`SELECT * FROM users WHERE email = ${email}`;
-      if (!user[0] || !user[0].password_hash || !(await bcrypt.compare(password, user[0].password_hash))) {
+      const dbUser = await sql`SELECT * FROM users WHERE email = ${email}`;
+      if (!dbUser[0] || !dbUser[0].password_hash || !(await bcrypt.compare(password, dbUser[0].password_hash))) {
         return { statusCode: 401, body: JSON.stringify({ error: 'Invalid email or password' }) };
       }
-      const token = jwt.sign({ id: user[0].id, role: user[0].role, email: user[0].email }, JWT_SECRET, { expiresIn: '7d' });
-      return { statusCode: 200, body: JSON.stringify({ token, user: { id: user[0].id, name: user[0].name, role: user[0].role, region: user[0].region } }) };
+      const token = jwt.sign({ id: dbUser[0].id, role: dbUser[0].role, email: dbUser[0].email }, JWT_SECRET, { expiresIn: '7d' });
+      return { statusCode: 200, body: JSON.stringify({ token, user: { id: dbUser[0].id, name: dbUser[0].name, role: dbUser[0].role, region: dbUser[0].region, level: dbUser[0].level } }) };
     }
 
     // --- GET ---
     if (event.httpMethod === 'GET') {
       if (type === 'users') {
-        const res = await sql`SELECT id, name, email, role, region, created_at FROM users ORDER BY created_at DESC`;
+        const res = await sql`SELECT id, name, email, role, region, level, created_at FROM users ORDER BY created_at DESC`;
         return { statusCode: 200, body: JSON.stringify(res.map(u => ({...u, password_hash: '••••••'}))) };
       }
       if (type === 'outlets') {
-        const res = await sql`SELECT id, name, type, address, contact_person, created_at FROM outlets ORDER BY created_at DESC`;
+        const res = await sql`SELECT id, name, type, address, contact_person, branch_area, created_at FROM outlets ORDER BY created_at DESC`;
         return { statusCode: 200, body: JSON.stringify(res) };
       }
       if (type === 'records') {
         const res = await sql`
-          SELECT sr.id, o.name as outlet, u.name as sales, sr.record_date::text as date, 
+          SELECT sr.id, o.name as outlet, u.name as sales, sr.record_date::text as date,
                  sr.volume_be as be, sr.sku_name as sku, sr.outlet_id, sr.sales_id
           FROM sales_records sr
           LEFT JOIN outlets o ON sr.outlet_id = o.id
@@ -97,7 +351,94 @@ const _handler = async (event, context) => {
         `;
         return { statusCode: 200, body: JSON.stringify(res) };
       }
-      return { statusCode: 200, body: JSON.stringify(await transformToFrontend()) };
+      if (type === 'assignments') {
+        const mode = params.mode;
+        if (mode === 'vacant') {
+          const res = await sql`
+            SELECT o.* FROM outlets o
+            WHERE NOT EXISTS (
+              SELECT 1 FROM outlet_assignments oa WHERE oa.outlet_id = o.id AND oa.unassigned_at IS NULL
+            )
+            ORDER BY o.name
+          `;
+          return { statusCode: 200, body: JSON.stringify(res) };
+        }
+        const res = await sql`
+          SELECT oa.id, oa.outlet_id, oa.salesman_id, oa.assigned_at, oa.unassigned_at, oa.notes,
+                 o.name as outlet_name, o.branch_area,
+                 u.name as salesman_name
+          FROM outlet_assignments oa
+          LEFT JOIN outlets o ON oa.outlet_id = o.id
+          LEFT JOIN users u ON oa.salesman_id = u.id
+          WHERE oa.unassigned_at IS NULL
+          ORDER BY o.name
+        `;
+        return { statusCode: 200, body: JSON.stringify(res) };
+      }
+      if (type === 'targets') {
+        const targetUserId = params.user_id;
+        if (targetUserId) {
+          const res = await sql`SELECT * FROM targets WHERE user_id = ${targetUserId} ORDER BY year DESC, month DESC`;
+          return { statusCode: 200, body: JSON.stringify(res) };
+        }
+        const res = await sql`SELECT * FROM targets ORDER BY year DESC, month DESC LIMIT 200`;
+        return { statusCode: 200, body: JSON.stringify(res) };
+      }
+      // Dashboard data
+      if (!type && user) {
+        if (user.role === 'sales') {
+          return { statusCode: 200, body: JSON.stringify(await getUserDashboardData(user.id)) };
+        }
+        if (user.role === 'supervisor') {
+          return { statusCode: 200, body: JSON.stringify(await getSupervisorDashboardData(user.id)) };
+        }
+        if (user.role === 'admin') {
+          return { statusCode: 200, body: JSON.stringify(await getSupervisorDashboardData(user.id)) };
+        }
+      }
+      // Fallback old transformToFrontend for backwards compat
+      if (!type) {
+        const currentMonth = new Date().getMonth() + 1;
+        const currentYear = new Date().getFullYear();
+        const userId = process.env.DEFAULT_USER_ID;
+        if (!userId) throw new Error('DEFAULT_USER_ID missing');
+
+        const targetRow = await sql`SELECT target_be, incentive_rules FROM targets WHERE user_id = ${userId} AND month = ${currentMonth} AND year = ${currentYear}`;
+        if (!targetRow?.length) throw new Error('No target configured');
+
+        const salesSum = await sql`SELECT COALESCE(SUM(volume_be), 0) as total FROM sales_records WHERE record_date >= ${`${currentYear}-${String(currentMonth).padStart(2,'0')}-01`}`;
+        const daysElapsed = Math.min(new Date().getDate(), 22);
+
+        const outlets = await sql`
+          SELECT o.id, o.name, o.type, o.address, o.contact_person,
+                 COALESCE(SUM(CASE WHEN EXTRACT(MONTH FROM sr.record_date) = ${currentMonth} THEN sr.volume_be ELSE 0 END), 0) as beMonth,
+                 MAX(sr.record_date) as last_order
+          FROM outlets o LEFT JOIN sales_records sr ON o.id = sr.outlet_id
+          GROUP BY o.id, o.name, o.type, o.address, o.contact_person
+        `;
+
+        return {
+          statusCode: 200,
+          body: JSON.stringify({
+            dashboardStats: {
+              monthlyTargetBE: parseFloat(targetRow[0].target_be),
+              currentBE: parseFloat(salesSum[0].total),
+              daysElapsed,
+              totalWorkingDays: 22,
+              incentiveTiers: targetRow[0].incentive_rules
+            },
+            outlets: outlets.map(o => {
+              const daysSince = o.last_order ? Math.floor((Date.now() - new Date(o.last_order)) / 86400000) : 99;
+              return {
+                id: o.id, name: o.name, type: o.type, address: o.address, contact: o.contact_person,
+                beMonth: parseFloat(o.bemonth), health: Math.max(0, 100 - daysSince * 2),
+                lastOrder: daysSince === 0 ? 'Today' : `${daysSince} days ago`,
+                alert: daysSince > 7 ? 'Risk of Churn' : null
+              };
+            })
+          })
+        };
+      }
     }
 
     // --- POST ---
@@ -106,12 +447,38 @@ const _handler = async (event, context) => {
 
       if (type === 'users' && isJson) {
         const hash = await bcrypt.hash(body.password || DEFAULT_PASSWORD, 10);
-        const res = await sql`INSERT INTO users (id, name, email, role, region, password_hash, netlify_uid) VALUES (gen_random_uuid(), ${body.name}, ${body.email}, ${body.role}, ${body.region||''}, ${hash}, gen_random_uuid()::text) RETURNING *`;
+        const res = await sql`INSERT INTO users (id, name, email, role, region, level, password_hash, netlify_uid) VALUES (gen_random_uuid(), ${body.name}, ${body.email}, ${body.role}, ${body.region||''}, ${body.level||null}, ${hash}, gen_random_uuid()::text) RETURNING *`;
         return { statusCode: 201, body: JSON.stringify({ ...res[0], password_hash: '••••••' }) };
       }
       if (type === 'outlets' && isJson) {
-        const { name, type: otype, address, contact_person } = body;
-        const res = await sql`INSERT INTO outlets (id, name, type, address, contact_person) VALUES (gen_random_uuid(), ${name}, ${otype||''}, ${address||''}, ${contact_person||''}) RETURNING *`;
+        const { name, type: otype, address, contact_person, branch_area } = body;
+        const res = await sql`INSERT INTO outlets (id, name, type, address, contact_person, branch_area) VALUES (gen_random_uuid(), ${name}, ${otype||''}, ${address||''}, ${contact_person||''}, ${branch_area||''}) RETURNING *`;
+        return { statusCode: 201, body: JSON.stringify(res[0]) };
+      }
+      if (type === 'assignments' && isJson) {
+        // Unassign any existing active assignment for this outlet
+        await sql`UPDATE outlet_assignments SET unassigned_at = CURRENT_TIMESTAMP WHERE outlet_id = ${body.outlet_id} AND unassigned_at IS NULL`;
+        const res = await sql`
+          INSERT INTO outlet_assignments (id, outlet_id, salesman_id, assigned_by, notes)
+          VALUES (gen_random_uuid(), ${body.outlet_id}, ${body.salesman_id || null}, ${user?.id || null}, ${body.notes || ''})
+          RETURNING *
+        `;
+        return { statusCode: 201, body: JSON.stringify(res[0]) };
+      }
+      if (type === 'targets' && isJson) {
+        const pc = body.percentage_config || JSON.stringify(getDefaultPercentageConfig(body.level || 'L2'));
+        const vc = body.volume_config || JSON.stringify(getDefaultVolumeConfig());
+        const ac = body.active_outlets_config || JSON.stringify(getDefaultActiveOutletsConfig(body.level || 'L2'));
+        const res = await sql`
+          INSERT INTO targets (id, user_id, month, year, target_be, percentage_config, volume_config, active_outlets_config)
+          VALUES (gen_random_uuid(), ${body.user_id}, ${body.month}, ${body.year}, ${body.target_be}, ${pc}::jsonb, ${vc}::jsonb, ${ac}::jsonb)
+          ON CONFLICT (user_id, month, year) DO UPDATE SET
+            target_be = EXCLUDED.target_be,
+            percentage_config = EXCLUDED.percentage_config,
+            volume_config = EXCLUDED.volume_config,
+            active_outlets_config = EXCLUDED.active_outlets_config
+          RETURNING *
+        `;
         return { statusCode: 201, body: JSON.stringify(res[0]) };
       }
       if (!type && !isJson) {
@@ -147,22 +514,36 @@ const _handler = async (event, context) => {
     }
 
     // --- PUT ---
-    if (event.httpMethod === 'PUT' && id && isJson) {
+    if (event.httpMethod === 'PUT' && isJson) {
       const body = JSON.parse(event.body);
-      if (type === 'users') {
-        const updateData = { name: body.name, role: body.role, region: body.region || '' };
+      if (type === 'users' && id) {
+        const updateData = { name: body.name, role: body.role, region: body.region || '', level: body.level || null };
         if (body.password && body.password !== '••••••') updateData.password_hash = await bcrypt.hash(body.password, 10);
-        
-        const fields = Object.keys(updateData).map(k => `${k}=${updateData[k]}`).join(', ');
-        const res = await sql`UPDATE users SET name=${body.name}, role=${body.role}, region=${body.region||''}, password_hash=COALESCE(${updateData.password_hash}, password_hash) WHERE id=${id} RETURNING *`;
+        const res = await sql`UPDATE users SET name=${body.name}, role=${body.role}, region=${body.region||''}, level=${body.level||null}, password_hash=COALESCE(${updateData.password_hash}, password_hash) WHERE id=${id} RETURNING *`;
         return { statusCode: res.length ? 200 : 404, body: JSON.stringify(res[0] || { error: 'Not found' }) };
       }
-      if (type === 'outlets') {
-        const res = await sql`UPDATE outlets SET name=${body.name}, type=${body.type||''}, address=${body.address||''}, contact_person=${body.contact_person||''} WHERE id=${id} RETURNING *`;
+      if (type === 'outlets' && id) {
+        const res = await sql`UPDATE outlets SET name=${body.name}, type=${body.type||''}, address=${body.address||''}, contact_person=${body.contact_person||''}, branch_area=${body.branch_area||''} WHERE id=${id} RETURNING *`;
+        return { statusCode: res.length ? 200 : 404, body: JSON.stringify(res[0] || { error: 'Not found' }) };
+      }
+      if (type === 'assignments' && id) {
+        // Unassign
+        const res = await sql`UPDATE outlet_assignments SET unassigned_at = CURRENT_TIMESTAMP WHERE id = ${id} RETURNING *`;
+        return { statusCode: res.length ? 200 : 404, body: JSON.stringify(res[0] || { error: 'Not found' }) };
+      }
+      if (type === 'targets' && id) {
+        const res = await sql`
+          UPDATE targets SET
+            target_be = COALESCE(${body.target_be}, target_be),
+            percentage_config = COALESCE(${body.percentage_config ? JSON.stringify(body.percentage_config) : null}::jsonb, percentage_config),
+            volume_config = COALESCE(${body.volume_config ? JSON.stringify(body.volume_config) : null}::jsonb, volume_config),
+            active_outlets_config = COALESCE(${body.active_outlets_config ? JSON.stringify(body.active_outlets_config) : null}::jsonb, active_outlets_config)
+          WHERE id = ${id} RETURNING *
+        `;
         return { statusCode: res.length ? 200 : 404, body: JSON.stringify(res[0] || { error: 'Not found' }) };
       }
       const res = await sql`
-        UPDATE sales_records SET 
+        UPDATE sales_records SET
           outlet_id = (SELECT id FROM outlets WHERE name = ${body.outlet}),
           sales_id = (SELECT id FROM users WHERE name = ${body.sales}),
           record_date = ${body.date}, volume_be = ${body.be}, sku_name = ${body.sku||null}
@@ -175,6 +556,8 @@ const _handler = async (event, context) => {
     if (event.httpMethod === 'DELETE' && id) {
       if (type === 'users') await sql`DELETE FROM users WHERE id=${id}`;
       else if (type === 'outlets') await sql`DELETE FROM outlets WHERE id=${id}`;
+      else if (type === 'assignments') await sql`DELETE FROM outlet_assignments WHERE id=${id}`;
+      else if (type === 'targets') await sql`DELETE FROM targets WHERE id=${id}`;
       else await sql`DELETE FROM sales_records WHERE id=${id}`;
       return { statusCode: 200, body: JSON.stringify({ success: true }) };
     }
