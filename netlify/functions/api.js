@@ -9,7 +9,7 @@ const rawDbUrl = process.env.DATABASE_URL || '';
 const DATABASE_URL = rawDbUrl.replace(/([?&])channel_binding=[^&]*&?/g, '$1').replace(/[?&]$/, '');
 const sql = neon(DATABASE_URL);
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
-const DEFAULT_PASSWORD = process.env.DEFAULT_PASSWORD || 'Password123!';
+const DEFAULT_PASSWORD = process.env.DEFAULT_PASSWORD;
 
 const parseExcelDate = (val) => {
   if (!val) return null;
@@ -446,7 +446,11 @@ const _handler = async (event, context) => {
       const body = isJson ? JSON.parse(event.body) : null;
 
       if (type === 'users' && isJson) {
-        const hash = await bcrypt.hash(body.password || DEFAULT_PASSWORD, 10);
+        const plainPw = body.password || DEFAULT_PASSWORD;
+        if (!plainPw) {
+          return { statusCode: 400, body: JSON.stringify({ error: 'Password or DEFAULT_PASSWORD env var is required' }) };
+        }
+        const hash = await bcrypt.hash(plainPw, 10);
         const res = await sql`INSERT INTO users (id, name, email, role, region, level, password_hash, netlify_uid) VALUES (gen_random_uuid(), ${body.name}, ${body.email}, ${body.role}, ${body.region||''}, ${body.level||null}, ${hash}, gen_random_uuid()::text) RETURNING *`;
         return { statusCode: 201, body: JSON.stringify({ ...res[0], password_hash: '••••••' }) };
       }

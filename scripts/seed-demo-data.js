@@ -5,7 +5,11 @@ import bcrypt from 'bcryptjs';
 const rawDbUrl = process.env.DATABASE_URL || '';
 const DATABASE_URL = rawDbUrl.replace(/([?&])channel_binding=[^&]*&?/g, '$1').replace(/[?&]$/, '');
 const sql = neon(DATABASE_URL);
-const DEFAULT_PASSWORD = process.env.DEFAULT_PASSWORD || 'Password123!';
+const DEFAULT_PASSWORD = process.env.DEFAULT_PASSWORD;
+if (!DEFAULT_PASSWORD) {
+  console.error('❌ Error: DEFAULT_PASSWORD env var is required');
+  process.exit(1);
+}
 const WIPE = process.argv.includes('--wipe');
 
 const now = new Date();

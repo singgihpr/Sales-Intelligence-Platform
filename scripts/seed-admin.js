@@ -8,7 +8,11 @@ const sql = neon(DATABASE_URL);
 
 async function seed() {
   const email = process.argv[2] || 'admin@example.com';
-  const password = process.argv[3] || 'Password123!';
+  const password = process.argv[3];
+  if (!password) {
+    console.error('❌ Error: Password argument is required. Usage: npm run seed -- email@example.com YourPassword "Admin Name"');
+    process.exit(1);
+  }
   const name = process.argv[4] || 'Admin User';
 
   const hash = await bcrypt.hash(password, 10);
