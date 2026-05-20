@@ -486,7 +486,7 @@ const _handler = async (event, context) => {
         return { statusCode: 201, body: JSON.stringify(res[0]) };
       }
       if (!type && !isJson) {
-        // Upload Handler
+        const action = params.action || 'upload';
         let bodyBuffer;
         if (event.isBase64Encoded) bodyBuffer = Buffer.from(event.body, 'base64');
         else if (typeof event.body === 'string') bodyBuffer = Buffer.from(event.body, 'binary');
@@ -494,20 +494,67 @@ const _handler = async (event, context) => {
 
         return new Promise((resolve) => {
           const busboy = Busboy({ headers: event.headers });
-          busboy.on('file', async (fieldname, file) => {
+          busboy.on('file', async (fieldname, file, info) => {
             const chunks = [];
             file.on('data', d => chunks.push(d));
             file.on('end', async () => {
               try {
-                const workbook = xlsx.read(Buffer.concat(chunks), { cellDates: true });
-                const rows = xlsx.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]).map(r => ({ ...r, Date: parseExcelDate(r['Date']) }));
-                const queries = rows.map(r => sql`
-                  INSERT INTO sales_records (id, outlet_id, sales_id, record_date, volume_be, sku_name)
-                  VALUES (gen_random_uuid(), (SELECT id FROM outlets WHERE name = ${r['Outlet Name']}), (SELECT id FROM users WHERE name = ${r['Sales Name']}), ${r['Date']}, ${r['Volume BE']}, ${r['SKU']||null})
-                  ON CONFLICT DO NOTHING
-                `);
-                await Promise.all(queries);
-                resolve({ statusCode: 200, body: JSON.stringify({ success: true, inserted: rows.length }) });
+                const buffer = Buffer.concat(chunks);
+                const ext = (info.filename || '').split('.').pop()?.toLowerCase();
+                const isCsv = ext === 'csv';
+                let rows = [];
+                if (isCsv) {
+                  const csvText = buffer.toString('utf-8');
+                  const workbook = xlsx.read(csvText, { type: 'string', cellDates: true });
+                  rows = xlsx.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+                } else {
+                  const workbook = xlsx.read(buffer, { cellDates: true });
+                  rows = xlsx.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+                }
+                rows = rows.map(r => ({ ...r, Date: parseExcelDate(r['Date']) }));
+
+                if (action === 'preview') {
+                  // Validate rows without inserting
+                  const allOutlets = await sql`SELECT id, name FROM outlets`;
+                  const allUsers = await sql`SELECT id, name FROM users WHERE role = 'sales'`;
+                  const outletMap = Object.fromEntries(allOutlets.map(o => [o.name, o.id]));
+                  const userMap = Object.fromEntries(allUsers.map(u => [u.name, u.id]));
+
+                  const preview = rows.map((r, idx) => {
+                    const outletName = r['Outlet Name'];
+                    const salesName = r['Sales Name'];
+                    const date = r['Date'];
+                    const volume = r['Volume BE'];
+                    const sku = r['SKU'];
+                    const errors = [];
+                    if (!outletName) errors.push('Missing Outlet Name');
+                    else if (!outletMap[outletName]) errors.push(`Outlet not found: ${outletName}`);
+                    if (!salesName) errors.push('Missing Sales Name');
+                    else if (!userMap[salesName]) errors.push(`Salesman not found: ${salesName}`);
+                    if (!date) errors.push('Invalid Date');
+                    if (volume === undefined || volume === null || isNaN(Number(volume))) errors.push('Invalid Volume BE');
+                    return {
+                      row: idx + 2,
+                      outletName,
+                      salesName,
+                      date,
+                      volume: volume !== undefined ? Number(volume) : null,
+                      sku,
+                      valid: errors.length === 0,
+                      errors
+                    };
+                  });
+                  resolve({ statusCode: 200, body: JSON.stringify({ action: 'preview', total: rows.length, valid: preview.filter(p => p.valid).length, invalid: preview.filter(p => !p.valid).length, rows: preview }) });
+                } else {
+                  // Upload / Import
+                  const queries = rows.map(r => sql`
+                    INSERT INTO sales_records (id, outlet_id, sales_id, record_date, volume_be, sku_name)
+                    VALUES (gen_random_uuid(), (SELECT id FROM outlets WHERE name = ${r['Outlet Name']}), (SELECT id FROM users WHERE name = ${r['Sales Name']}), ${r['Date']}, ${r['Volume BE']}, ${r['SKU']||null})
+                    ON CONFLICT DO NOTHING
+                  `);
+                  await Promise.all(queries);
+                  resolve({ statusCode: 200, body: JSON.stringify({ success: true, inserted: rows.length }) });
+                }
               } catch (e) { resolve({ statusCode: 500, body: JSON.stringify({ error: e.message }) }); }
             });
           });

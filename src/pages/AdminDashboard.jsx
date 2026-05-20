@@ -35,6 +35,9 @@ export default function AdminDashboard() {
   const [editingTarget, setEditingTarget] = useState(null);
 
   const [showVacant, setShowVacant] = useState(false);
+  const [previewData, setPreviewData] = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [uploadFile, setUploadFile] = useState(null);
 
   const token = localStorage.getItem('token');
 
@@ -79,15 +82,34 @@ export default function AdminDashboard() {
     } catch (e) { setMessage(`❌ ${e.message}`); }
   };
 
-  const handleUpload = async (e) => {
-    e.preventDefault();
+  const handleFileSelect = (e) => {
     const file = e.target.files[0];
-    if (!file) return;
-    const fd = new FormData(); fd.append('file', file);
+    if (file) setUploadFile(file);
+    setPreviewData(null);
+  };
+
+  const handlePreview = async () => {
+    if (!uploadFile) { setMessage('❌ Please select a file first'); return; }
+    setPreviewLoading(true);
+    setMessage('');
+    const fd = new FormData(); fd.append('file', uploadFile);
+    try {
+      const res = await fetch('/.netlify/functions/api?action=preview', { method: 'POST', body: fd });
+      if (!res.ok) throw new Error(await res.text());
+      const d = await res.json();
+      setPreviewData(d);
+      setMessage(`📋 Preview: ${d.valid} valid, ${d.invalid} invalid out of ${d.total} rows`);
+    } catch (e) { setMessage(`❌ Preview failed: ${e.message}`); }
+    finally { setPreviewLoading(false); }
+  };
+
+  const handleUpload = async () => {
+    if (!uploadFile) { setMessage('❌ Please select a file first'); return; }
+    const fd = new FormData(); fd.append('file', uploadFile);
     try {
       const res = await fetch('/.netlify/functions/api', { method: 'POST', body: fd });
       if (!res.ok) throw new Error(res.status);
-      const d = await res.json(); setMessage(`✅ Uploaded ${d.inserted} records.`); fetchData();
+      const d = await res.json(); setMessage(`✅ Uploaded ${d.inserted} records.`); fetchData(); setPreviewData(null); setUploadFile(null);
     } catch(e) { setMessage('❌ Upload failed'); }
   };
 
@@ -143,12 +165,69 @@ export default function AdminDashboard() {
       <main className="max-w-[1400px] mx-auto px-6 lg:px-10 py-6">
         {activeTab === 'records' && (
           <div className="space-y-6">
-            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6">
-              <form onSubmit={handleUpload} className="flex flex-col sm:flex-row gap-4 items-start sm:items-end">
-                <input type="file" accept=".xlsx,.xls" onChange={handleUpload} className="block w-full sm:w-auto text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100" />
-                <p className="text-xs text-slate-500">Columns: <code>Outlet Name, Sales Name, Date, Volume BE, SKU</code></p>
-              </form>
+            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6 space-y-4">
+              <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-end">
+                <input type="file" accept=".csv,.xlsx,.xls" onChange={handleFileSelect} className="block w-full sm:w-auto text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100" />
+                <div className="flex gap-2">
+                  <button onClick={handlePreview} disabled={!uploadFile || previewLoading} className="px-4 py-2 bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-400 rounded-lg text-sm font-semibold hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed">
+                    {previewLoading ? 'Previewing...' : 'Preview'}
+                  </button>
+                  <button onClick={handleUpload} disabled={!uploadFile || (previewData && previewData.invalid > 0)} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                    Import
+                  </button>
+                </div>
+              </div>
+              <p className="text-xs text-slate-500">Required columns: <code>Outlet Name, Sales Name, Date, Volume BE</code> &bull; Optional: <code>SKU</code></p>
             </div>
+
+            {previewData && (
+              <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-bold">Preview</h2>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-medium text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 px-2 py-1 rounded-full">{previewData.valid} Valid</span>
+                    <span className="text-xs font-medium text-red-600 bg-red-50 dark:bg-red-950/30 px-2 py-1 rounded-full">{previewData.invalid} Invalid</span>
+                    <button onClick={() => setPreviewData(null)} className="text-xs text-slate-400 hover:text-slate-600 underline">Clear</button>
+                  </div>
+                </div>
+                <div className="overflow-x-auto max-h-80 overflow-y-auto">
+                  <table className="w-full text-sm text-left min-w-[700px]">
+                    <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800 sticky top-0 z-10">
+                      <tr>
+                        <th className="px-3 py-2">Row</th>
+                        <th className="px-3 py-2">Outlet</th>
+                        <th className="px-3 py-2">Sales</th>
+                        <th className="px-3 py-2">Date</th>
+                        <th className="px-3 py-2">Vol BE</th>
+                        <th className="px-3 py-2">SKU</th>
+                        <th className="px-3 py-2">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {previewData.rows.map((r, idx) => (
+                        <tr key={idx} className={r.valid ? 'hover:bg-slate-50 dark:hover:bg-slate-800/50' : 'bg-red-50/50 dark:bg-red-950/20'}>
+                          <td className="px-3 py-2 font-mono text-xs text-slate-400">{r.row}</td>
+                          <td className="px-3 py-2">{r.outletName || '-'}</td>
+                          <td className="px-3 py-2">{r.salesName || '-'}</td>
+                          <td className="px-3 py-2 font-mono text-xs">{r.date || '-'}</td>
+                          <td className="px-3 py-2">{r.volume !== null ? r.volume : '-'}</td>
+                          <td className="px-3 py-2 text-slate-500">{r.sku || '-'}</td>
+                          <td className="px-3 py-2">
+                            {r.valid ? (
+                              <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 px-2 py-0.5 rounded-full">VALID</span>
+                            ) : (
+                              <span className="text-[10px] font-bold text-red-600 bg-red-50 dark:bg-red-950/30 px-2 py-0.5 rounded-full" title={r.errors.join('; ')}>
+                                {r.errors.length} ERROR{r.errors.length > 1 ? 'S' : ''}
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
             {showRecForm && (
               <form onSubmit={(e) => { e.preventDefault(); handleCrud('records', editingRecord ? 'PUT' : 'POST', editingRecord?.id, recForm, setRecords, () => setShowRecForm(false)); }} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6 grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
