@@ -121,16 +121,18 @@ export default function AdminDashboard() {
             <button onClick={()=>navigate('/')} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors" title="Back to Sales Dashboard"><ArrowLeft className="w-5 h-5 text-slate-600 dark:text-slate-400"/></button>
             <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Admin Dashboard</h1>
           </div>
-          <div className="flex items-center gap-3 w-full lg:w-auto">
-            <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg w-full lg:w-auto overflow-x-auto">
+          <div className="flex items-center gap-2 w-full lg:w-auto min-w-0">
+            <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg overflow-x-auto flex-1 min-w-0 max-w-full">
               {tabs.map(t => (
-                <button key={t.id} onClick={() => setActiveTab(t.id)} className={`flex-1 lg:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all whitespace-nowrap ${activeTab === t.id ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white' : 'text-slate-500 hover:text-slate-700'}`}>
-                  <t.icon className="w-4 h-4" /> {t.label}
+                <button key={t.id} onClick={() => setActiveTab(t.id)} className={`flex items-center justify-center gap-1.5 px-2 md:px-3 py-2 rounded-md text-xs md:text-sm font-medium transition-all whitespace-nowrap shrink-0 ${activeTab === t.id ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white' : 'text-slate-500 hover:text-slate-700'}`}>
+                  <t.icon className="w-4 h-4 shrink-0" />
+                  <span className="hidden md:inline">{t.label}</span>
                 </button>
               ))}
             </div>
-            <button onClick={handleLogout} className="flex items-center gap-2 px-3 py-2 bg-red-50 text-red-600 dark:bg-red-950/50 dark:text-red-400 rounded-lg hover:bg-red-100 dark:hover:bg-red-950/80 transition-colors">
-              <LogOut className="w-4 h-4" /> <span className="hidden sm:inline">Logout</span>
+            <button onClick={handleLogout} className="flex items-center gap-1.5 px-2 md:px-3 py-2 bg-red-50 text-red-600 dark:bg-red-950/50 dark:text-red-400 rounded-lg hover:bg-red-100 dark:hover:bg-red-950/80 transition-colors shrink-0 text-xs md:text-sm">
+              <LogOut className="w-4 h-4" />
+              <span className="hidden md:inline">Logout</span>
             </button>
           </div>
         </div>
