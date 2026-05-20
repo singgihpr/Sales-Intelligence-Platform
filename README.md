@@ -123,7 +123,7 @@ Create a `.env` file in the project root:
 ```env
 DATABASE_URL=postgresql://neondb_owner:PASSWORD@ep-xxx-pooler.c-xxx.aws.neon.tech/neondb?sslmode=require
 JWT_SECRET=your-super-secret-jwt-key-min-32-characters-long
-DEFAULT_PASSWORD=Password123!
+DEFAULT_PASSWORD=<your_default_value>
 DEFAULT_USER_ID=YOUR_DEFAULT_USER_UUID
 ```
 
