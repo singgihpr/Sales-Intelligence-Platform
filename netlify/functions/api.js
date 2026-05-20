@@ -485,7 +485,7 @@ const _handler = async (event, context) => {
         `;
         return { statusCode: 201, body: JSON.stringify(res[0]) };
       }
-      if (!type && !isJson) {
+      if (!isJson) {
         const action = params.action || 'upload';
         let bodyBuffer;
         if (event.isBase64Encoded) bodyBuffer = Buffer.from(event.body, 'base64');

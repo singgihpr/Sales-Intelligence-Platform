@@ -94,7 +94,7 @@ export default function AdminDashboard() {
     setMessage('');
     const fd = new FormData(); fd.append('file', uploadFile);
     try {
-      const res = await fetch('/.netlify/functions/api?action=preview', { method: 'POST', body: fd });
+      const res = await fetch('/.netlify/functions/api?action=preview', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: fd });
       if (!res.ok) throw new Error(await res.text());
       const d = await res.json();
       setPreviewData(d);
@@ -107,7 +107,7 @@ export default function AdminDashboard() {
     if (!uploadFile) { setMessage('❌ Please select a file first'); return; }
     const fd = new FormData(); fd.append('file', uploadFile);
     try {
-      const res = await fetch('/.netlify/functions/api', { method: 'POST', body: fd });
+      const res = await fetch('/.netlify/functions/api', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: fd });
       if (!res.ok) throw new Error(res.status);
       const d = await res.json(); setMessage(`✅ Uploaded ${d.inserted} records.`); fetchData(); setPreviewData(null); setUploadFile(null);
     } catch(e) { setMessage('❌ Upload failed'); }
