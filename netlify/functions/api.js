@@ -168,7 +168,7 @@ const getUserDashboardData = async (userId) => {
 
   const now = new Date();
   const daysElapsed = now.getDate();
-  const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
+  const daysInMonth = new Date(year, month, 0).getDate();
 
   return {
     user,
