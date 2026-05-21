@@ -99,7 +99,7 @@ export default function AdminDashboard() {
       if (!res.ok) throw new Error(await res.text());
       const d = await res.json();
       setPreviewData(d);
-      setMessage(`📋 Preview: ${d.valid} valid, ${d.invalid} invalid out of ${d.total} rows`);
+      setMessage(`✅ Preview: ${d.valid} valid, ${d.invalid} invalid out of ${d.total} rows`);
     } catch (e) { setMessage(`❌ Preview failed: ${e.message}`); }
     finally { setPreviewLoading(false); }
   };
