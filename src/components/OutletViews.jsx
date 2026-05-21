@@ -1,14 +1,65 @@
 import React, { useState } from 'react';
-import { Search, ArrowLeft, Calendar, MessageSquare, History, MapPin, ChevronRight } from 'lucide-react';
+import { Search, ArrowLeft, Calendar, MessageSquare, History, MapPin, ChevronRight, Info, X } from 'lucide-react';
 
-const HealthBadge = ({ score }) => {
+const OHSInfoModal = ({ open, onClose }) => {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
+      <div className="bg-white dark:bg-slate-900 rounded-t-2xl sm:rounded-2xl shadow-xl w-full sm:max-w-sm p-6 space-y-4 animate-in slide-in-from-bottom-4 duration-300">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-bold text-slate-900 dark:text-white">Outlet Health Score (OHS)</h3>
+          <button onClick={onClose} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors">
+            <X className="w-5 h-5 text-slate-500" />
+          </button>
+        </div>
+        <p className="text-xs text-slate-500 leading-relaxed">
+          OHS menunjukkan seberapa &quot;sehat&quot; outlet berdasarkan waktu transaksi terakhir. Semakin tinggi skor, semakin aktif outlet tersebut.
+        </p>
+        <div className="space-y-2">
+          <div className="flex items-center gap-3 p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900">
+            <div className="w-3 h-3 rounded-full bg-emerald-500 shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-bold text-emerald-800 dark:text-emerald-400">80 - 100</p>
+              <p className="text-[10px] text-emerald-700/70 dark:text-emerald-500/70">Sangat Aktif — transaksi dalam 7 hari terakhir</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-900">
+            <div className="w-3 h-3 rounded-full bg-amber-500 shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-bold text-amber-800 dark:text-amber-400">50 - 79</p>
+              <p className="text-[10px] text-amber-700/70 dark:text-amber-500/70">Perlu Perhatian — transaksi 7-25 hari lalu</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 p-2.5 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-100 dark:border-red-900">
+            <div className="w-3 h-3 rounded-full bg-red-500 shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-bold text-red-800 dark:text-red-400">0 - 49</p>
+              <p className="text-[10px] text-red-700/70 dark:text-red-500/70">Berisiko Churn — transaksi &gt;25 hari lalu</p>
+            </div>
+          </div>
+        </div>
+        <p className="text-[10px] text-slate-400 text-center pt-1">
+          Rumus: <code>100 - (hari sejak transaksi terakhir &times; 2)</code>
+        </p>
+        <button onClick={onClose} className="w-full py-2.5 bg-emerald-600 text-white rounded-xl font-bold text-sm hover:bg-emerald-700 active:scale-95 transition-all">
+          Mengerti
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const HealthBadge = ({ score, onClick }) => {
   let colorClass = "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400";
   if (score >= 50) colorClass = "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400";
   if (score >= 80) colorClass = "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400";
   return (
-    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${colorClass}`}>
+    <button
+      onClick={onClick}
+      className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${colorClass} ${onClick ? 'cursor-pointer hover:opacity-80 active:scale-95 transition-transform' : ''}`}
+    >
       OHS: {score}
-    </span>
+    </button>
   );
 };
 
@@ -20,6 +71,7 @@ const Card = ({ children, className = "", onClick }) => (
 
 export function OutletListView({ outlets, onSelectOutlet }) {
   const [search, setSearch] = useState("");
+  const [showInfo, setShowInfo] = useState(false);
   const filtered = (outlets || []).filter(o =>
     o.name.toLowerCase().includes(search.toLowerCase()) ||
     (o.branchArea || '').toLowerCase().includes(search.toLowerCase())
@@ -27,6 +79,13 @@ export function OutletListView({ outlets, onSelectOutlet }) {
 
   return (
     <div className="space-y-4 pb-32 animate-in fade-in">
+      <div className="flex items-center justify-between px-1">
+        <p className="text-xs text-slate-500 font-medium">{filtered.length} outlet ditemukan</p>
+        <button onClick={() => setShowInfo(true)} className="flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-emerald-600 transition-colors">
+          <Info className="w-3.5 h-3.5" /> OHS
+        </button>
+      </div>
+
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
         <input type="text" placeholder="Cari nama outlet atau area..." className="w-full bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" value={search} onChange={(e) => setSearch(e.target.value)} />
@@ -42,7 +101,7 @@ export function OutletListView({ outlets, onSelectOutlet }) {
               <div>
                 <h4 className="text-sm font-bold">{outlet.name}</h4>
                 <div className="flex items-center gap-2 mt-1 flex-wrap">
-                  <HealthBadge score={outlet.health} />
+                  <HealthBadge score={outlet.health} onClick={() => setShowInfo(true)} />
                   {outlet.branchArea && <span className="text-[10px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded-full">{outlet.branchArea}</span>}
                 </div>
               </div>
@@ -55,12 +114,15 @@ export function OutletListView({ outlets, onSelectOutlet }) {
         ))}
         {filtered.length === 0 && <p className="text-center text-xs text-slate-400 py-8">Tidak ada outlet ditemukan.</p>}
       </div>
+
+      <OHSInfoModal open={showInfo} onClose={() => setShowInfo(false)} />
     </div>
   );
 }
 
 export function OutletDetailView({ outlet, onBack }) {
   const [note, setNote] = useState("");
+  const [showInfo, setShowInfo] = useState(false);
   return (
     <div className="space-y-6 pb-24 animate-in slide-in-from-right-4 duration-300">
       <button onClick={onBack} className="flex items-center gap-2 text-slate-500 font-bold text-xs uppercase tracking-wider">
@@ -77,11 +139,13 @@ export function OutletDetailView({ outlet, onBack }) {
             {outlet.branchArea && <p className="text-xs text-slate-400 mt-0.5 font-medium">Area: {outlet.branchArea}</p>}
           </div>
           <div className="text-right">
-            <HealthBadge score={outlet.health} />
+            <HealthBadge score={outlet.health} onClick={() => setShowInfo(true)} />
             <p className="text-[10px] text-slate-400 mt-1 uppercase font-bold tracking-tight">Status: Aktif</p>
           </div>
         </div>
       </section>
+
+      <OHSInfoModal open={showInfo} onClose={() => setShowInfo(false)} />
 
       <div className="grid grid-cols-2 gap-4">
         <Card className="bg-slate-50 dark:bg-slate-800/50 border-none p-4">
