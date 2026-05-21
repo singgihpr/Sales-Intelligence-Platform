@@ -1,7 +1,47 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, RefreshCw, Edit2, Trash2, Plus, Users, Database, Store, X, LogOut, ArrowLeft, Link2, Target, Award, Download, FileSpreadsheet } from 'lucide-react';
+import { Upload, RefreshCw, Edit2, Trash2, Plus, Users, Database, Store, X, LogOut, ArrowLeft, Link2, Target, Award, Download, FileSpreadsheet, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import * as XLSX from 'xlsx';
+
+function PaginationControls({ type, meta, onChange }) {
+  const { page, limit, total, search } = meta;
+  const totalPages = Math.ceil(total / limit) || 1;
+  const start = total === 0 ? 0 : (page - 1) * limit + 1;
+  const end = Math.min(page * limit, total);
+
+  const goPage = (p) => { if (p >= 1 && p <= totalPages) onChange(type, { page: p }); };
+  const setLimit = (l) => onChange(type, { page: 1, limit: parseInt(l) });
+  const setSearch = (s) => onChange(type, { page: 1, search: s });
+
+  return (
+    <div className="flex flex-col sm:flex-row gap-3 sm:items-center justify-between mb-4">
+      <div className="relative flex-1 max-w-sm">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+        <input
+          type="text"
+          placeholder="Cari..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') onChange(type, { page: 1, search }); }}
+          className="w-full pl-10 pr-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+        />
+      </div>
+      <div className="flex items-center gap-3">
+        <span className="text-xs text-slate-500 whitespace-nowrap">{start}-{end} dari {total}</span>
+        <select value={limit} onChange={e => setLimit(e.target.value)} className="text-xs bg-slate-100 dark:bg-slate-800 border-none rounded-lg px-2 py-1.5 focus:ring-2 focus:ring-emerald-500 outline-none">
+          <option value={10}>10</option>
+          <option value={20}>20</option>
+          <option value={50}>50</option>
+        </select>
+        <div className="flex items-center gap-1">
+          <button onClick={() => goPage(page - 1)} disabled={page <= 1} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed"><ChevronLeft className="w-4 h-4" /></button>
+          <span className="text-xs font-bold px-2">{page} / {totalPages}</span>
+          <button onClick={() => goPage(page + 1)} disabled={page >= totalPages} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed"><ChevronRight className="w-4 h-4" /></button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -14,6 +54,15 @@ export default function AdminDashboard() {
   const [assignments, setAssignments] = useState([]);
   const [vacantOutlets, setVacantOutlets] = useState([]);
   const [targets, setTargets] = useState([]);
+
+  const [pagination, setPagination] = useState({
+    records: { page: 1, limit: 10, total: 0, search: '' },
+    users: { page: 1, limit: 10, total: 0, search: '' },
+    outlets: { page: 1, limit: 10, total: 0, search: '' },
+    assignments: { page: 1, limit: 10, total: 0, search: '' },
+    vacant: { page: 1, limit: 10, total: 0, search: '' },
+    targets: { page: 1, limit: 10, total: 0, search: '' },
+  });
 
   // Form States
   const [editingRecord, setEditingRecord] = useState(null);
@@ -42,29 +91,38 @@ export default function AdminDashboard() {
 
   const token = localStorage.getItem('token');
 
-  const fetchData = async () => {
+  const fetchTable = async (type, overrides = {}) => {
+    const p = pagination[type];
+    const page = overrides.page !== undefined ? overrides.page : p.page;
+    const limit = overrides.limit !== undefined ? overrides.limit : p.limit;
+    const search = overrides.search !== undefined ? overrides.search : p.search;
+    const isVacant = type === 'vacant';
+    const urlType = isVacant ? 'assignments' : type;
+    const url = `/.netlify/functions/api?type=${urlType}${isVacant ? '&mode=vacant' : ''}&page=${page}&limit=${limit}&search=${encodeURIComponent(search)}`;
+    try {
+      const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+      if (!res.ok) throw new Error(await res.text());
+      const result = await res.json();
+      const list = result.data || [];
+      const total = result.total || 0;
+      if (type === 'records') setRecords(list);
+      if (type === 'users') setUsers(list);
+      if (type === 'outlets') setOutlets(list);
+      if (type === 'assignments') setAssignments(list);
+      if (type === 'vacant') setVacantOutlets(list);
+      if (type === 'targets') setTargets(list);
+      setPagination(prev => ({ ...prev, [type]: { ...prev[type], page, limit, total, search } }));
+    } catch (e) { setMessage(`❌ Fetch ${type} error: ${e.message}`); }
+  };
+
+  const fetchAll = async () => {
     setLoading(true);
-    const endpoints = ['/api?type=records', '/api?type=users', '/api?type=outlets', '/api?type=assignments', '/api?type=targets'];
-    try {
-      const results = await Promise.all(endpoints.map(url => fetch(`/.netlify/functions${url}`, { headers: { 'Authorization': `Bearer ${token}` } }).then(r => r.json())));
-      setRecords(results[0] || []);
-      setUsers(results[1] || []);
-      setOutlets(results[2] || []);
-      setAssignments(results[3] || []);
-      setTargets(results[4] || []);
-    } catch (e) { setMessage('❌ Fetch error'); } finally { setLoading(false); }
+    await Promise.all(['records', 'users', 'outlets', 'assignments', 'targets'].map(t => fetchTable(t)));
+    setLoading(false);
   };
 
-  const fetchVacant = async () => {
-    try {
-      const res = await fetch(`/.netlify/functions/api?type=assignments&mode=vacant`, { headers: { 'Authorization': `Bearer ${token}` } });
-      const data = await res.json();
-      setVacantOutlets(data || []);
-    } catch (e) { console.error(e); }
-  };
-
-  useEffect(() => { fetchData(); }, []);
-  useEffect(() => { if (showVacant) fetchVacant(); }, [showVacant]);
+  useEffect(() => { fetchAll(); }, []);
+  useEffect(() => { if (showVacant) fetchTable('vacant'); }, [showVacant]);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -77,7 +135,7 @@ export default function AdminDashboard() {
       const url = id ? `/.netlify/functions/api?type=${type}&id=${id}` : `/.netlify/functions/api?type=${type}`;
       const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(form) });
       if (!res.ok) throw new Error(await res.text());
-      fetchData();
+      await fetchTable(type);
       resetState();
       setMessage(`✅ ${type.charAt(0).toUpperCase()+type.slice(1)} ${method==='POST'?'created':method==='PUT'?'updated':'deleted'}.`);
     } catch (e) { setMessage(`❌ ${e.message}`); }
@@ -110,7 +168,7 @@ export default function AdminDashboard() {
     try {
       const res = await fetch('/.netlify/functions/api', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: fd });
       if (!res.ok) throw new Error(res.status);
-      const d = await res.json(); setMessage(`✅ Uploaded ${d.inserted} records.`); fetchData(); setPreviewData(null); setUploadFile(null);
+      const d = await res.json(); setMessage(`✅ Uploaded ${d.inserted} records.`); await fetchTable('records'); setPreviewData(null); setUploadFile(null);
     } catch(e) { setMessage('❌ Upload failed'); }
   };
 
@@ -281,7 +339,11 @@ export default function AdminDashboard() {
             )}
 
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6">
-              <div className="flex items-center justify-between mb-4"><h2 className="text-lg font-bold">Manage Records</h2><button onClick={fetchData} disabled={loading} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"><RefreshCw className={`w-4 h-4 ${loading?'animate-spin':''}`}/></button></div>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-bold">Manage Records</h2>
+                <button onClick={() => fetchTable('records')} disabled={loading} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"><RefreshCw className={`w-4 h-4 ${loading?'animate-spin':''}`}/></button>
+              </div>
+              <PaginationControls type="records" meta={pagination.records} onChange={(t, o) => fetchTable(t, o)} />
               <div className="overflow-x-auto"><table className="w-full text-sm text-left min-w-[700px]">
                 <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800"><tr><th className="px-4 py-3">Outlet</th><th className="px-4 py-3">Sales</th><th className="px-4 py-3">Date</th><th className="px-4 py-3">SKU</th><th className="px-4 py-3">Vol BE</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -314,6 +376,7 @@ export default function AdminDashboard() {
                 <h2 className="text-lg font-bold">Outlet Database</h2>
                 <button onClick={()=>openOutletEdit()} className="flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700"><Plus className="w-4 h-4"/> Add Outlet</button>
               </div>
+              <PaginationControls type="outlets" meta={pagination.outlets} onChange={(t, o) => fetchTable(t, o)} />
               <div className="overflow-x-auto"><table className="w-full text-sm text-left min-w-[700px]">
                 <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800"><tr><th className="px-4 py-3">Name</th><th className="px-4 py-3">Type</th><th className="px-4 py-3">Branch Area</th><th className="px-4 py-3">Address</th><th className="px-4 py-3">Contact</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -347,6 +410,7 @@ export default function AdminDashboard() {
                 <h2 className="text-lg font-bold">Team Members</h2>
                 <button onClick={()=>openUserEdit()} className="flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700"><Plus className="w-4 h-4"/> Add User</button>
               </div>
+              <PaginationControls type="users" meta={pagination.users} onChange={(t, o) => fetchTable(t, o)} />
               <div className="overflow-x-auto"><table className="w-full text-sm text-left min-w-[700px]">
                 <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800"><tr><th className="px-4 py-3">Name</th><th className="px-4 py-3">Email</th><th className="px-4 py-3">Role</th><th className="px-4 py-3">Level</th><th className="px-4 py-3">Region</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -385,8 +449,9 @@ export default function AdminDashboard() {
                 </div>
               </div>
               {showVacant && (
-                <div className="mb-6">
+                <div className="mb-6 space-y-3">
                   <h3 className="text-sm font-bold text-amber-700 mb-2">Vacant Outlets (No Salesman Assigned)</h3>
+                  <PaginationControls type="vacant" meta={pagination.vacant} onChange={(t, o) => fetchTable(t, o)} />
                   <div className="overflow-x-auto"><table className="w-full text-sm text-left min-w-[600px]">
                     <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800"><tr><th className="px-4 py-3">Name</th><th className="px-4 py-3">Branch Area</th><th className="px-4 py-3">Type</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -399,6 +464,7 @@ export default function AdminDashboard() {
                   </table></div>
                 </div>
               )}
+              <PaginationControls type="assignments" meta={pagination.assignments} onChange={(t, o) => fetchTable(t, o)} />
               <div className="overflow-x-auto"><table className="w-full text-sm text-left min-w-[700px]">
                 <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800"><tr><th className="px-4 py-3">Outlet</th><th className="px-4 py-3">Branch Area</th><th className="px-4 py-3">Salesman</th><th className="px-4 py-3">Assigned At</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -434,6 +500,7 @@ export default function AdminDashboard() {
                 <h2 className="text-lg font-bold">Bonus Targets & Configurations</h2>
                 <button onClick={()=>openTargetEdit()} className="flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700"><Plus className="w-4 h-4"/> Add Target</button>
               </div>
+              <PaginationControls type="targets" meta={pagination.targets} onChange={(t, o) => fetchTable(t, o)} />
               <div className="overflow-x-auto"><table className="w-full text-sm text-left min-w-[700px]">
                 <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800"><tr><th className="px-4 py-3">Salesman</th><th className="px-4 py-3">Month</th><th className="px-4 py-3">Year</th><th className="px-4 py-3">Target BE</th><th className="px-4 py-3">Percentage</th><th className="px-4 py-3">Volume</th><th className="px-4 py-3">Active Outlets</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">

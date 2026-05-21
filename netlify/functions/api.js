@@ -401,57 +401,128 @@ const _handler = async (event, context) => {
 
     // --- GET ---
     if (event.httpMethod === 'GET') {
+      const page = Math.max(1, parseInt(params.page) || 1);
+      const limit = Math.min(100, Math.max(1, parseInt(params.limit) || 10));
+      const offset = (page - 1) * limit;
+      const search = (params.search || '').trim();
+      const searchPattern = search ? `%${search}%` : '%';
+
+      const paginateResponse = (data, total) => ({
+        statusCode: 200,
+        body: JSON.stringify({ data, total, page, limit, totalPages: Math.ceil(total / limit) })
+      });
+
       if (type === 'users') {
-        const res = await sql`SELECT id, name, email, role, region, level, created_at FROM users ORDER BY created_at DESC`;
-        return { statusCode: 200, body: JSON.stringify(res.map(u => ({...u, password_hash: '••••••'}))) };
+        const dataRes = await sql`
+          SELECT id, name, email, role, region, level, created_at FROM users
+          WHERE (name ILIKE ${searchPattern} OR email ILIKE ${searchPattern} OR role ILIKE ${searchPattern} OR region ILIKE ${searchPattern})
+          ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}
+        `;
+        const countRes = await sql`
+          SELECT COUNT(*) as cnt FROM users
+          WHERE (name ILIKE ${searchPattern} OR email ILIKE ${searchPattern} OR role ILIKE ${searchPattern} OR region ILIKE ${searchPattern})
+        `;
+        return paginateResponse(dataRes.map(u => ({...u, password_hash: '••••••'})), parseInt(countRes[0].cnt));
       }
       if (type === 'outlets') {
-        const res = await sql`SELECT id, name, type, address, contact_person, branch_area, created_at FROM outlets ORDER BY created_at DESC`;
-        return { statusCode: 200, body: JSON.stringify(res) };
+        const dataRes = await sql`
+          SELECT id, name, type, address, contact_person, branch_area, created_at FROM outlets
+          WHERE (name ILIKE ${searchPattern} OR type ILIKE ${searchPattern} OR address ILIKE ${searchPattern} OR contact_person ILIKE ${searchPattern} OR branch_area ILIKE ${searchPattern})
+          ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}
+        `;
+        const countRes = await sql`
+          SELECT COUNT(*) as cnt FROM outlets
+          WHERE (name ILIKE ${searchPattern} OR type ILIKE ${searchPattern} OR address ILIKE ${searchPattern} OR contact_person ILIKE ${searchPattern} OR branch_area ILIKE ${searchPattern})
+        `;
+        return paginateResponse(dataRes, parseInt(countRes[0].cnt));
       }
       if (type === 'records') {
-        const res = await sql`
+        const dataRes = await sql`
           SELECT sr.id, o.name as outlet, u.name as sales, sr.record_date::text as date,
                  sr.volume_be as be, sr.sku_name as sku, sr.outlet_id, sr.sales_id
           FROM sales_records sr
           LEFT JOIN outlets o ON sr.outlet_id = o.id
           LEFT JOIN users u ON sr.sales_id = u.id
-          ORDER BY sr.record_date DESC LIMIT 200
+          WHERE (o.name ILIKE ${searchPattern} OR u.name ILIKE ${searchPattern} OR sr.sku_name ILIKE ${searchPattern})
+          ORDER BY sr.record_date DESC LIMIT ${limit} OFFSET ${offset}
         `;
-        return { statusCode: 200, body: JSON.stringify(res) };
+        const countRes = await sql`
+          SELECT COUNT(*) as cnt FROM sales_records sr
+          LEFT JOIN outlets o ON sr.outlet_id = o.id
+          LEFT JOIN users u ON sr.sales_id = u.id
+          WHERE (o.name ILIKE ${searchPattern} OR u.name ILIKE ${searchPattern} OR sr.sku_name ILIKE ${searchPattern})
+        `;
+        return paginateResponse(dataRes, parseInt(countRes[0].cnt));
       }
       if (type === 'assignments') {
         const mode = params.mode;
         if (mode === 'vacant') {
-          const res = await sql`
+          const dataRes = await sql`
             SELECT o.* FROM outlets o
             WHERE NOT EXISTS (
               SELECT 1 FROM outlet_assignments oa WHERE oa.outlet_id = o.id AND oa.unassigned_at IS NULL
             )
-            ORDER BY o.name
+            AND (o.name ILIKE ${searchPattern} OR o.type ILIKE ${searchPattern} OR o.branch_area ILIKE ${searchPattern} OR o.address ILIKE ${searchPattern})
+            ORDER BY o.name LIMIT ${limit} OFFSET ${offset}
           `;
-          return { statusCode: 200, body: JSON.stringify(res) };
+          const countRes = await sql`
+            SELECT COUNT(*) as cnt FROM outlets o
+            WHERE NOT EXISTS (
+              SELECT 1 FROM outlet_assignments oa WHERE oa.outlet_id = o.id AND oa.unassigned_at IS NULL
+            )
+            AND (o.name ILIKE ${searchPattern} OR o.type ILIKE ${searchPattern} OR o.branch_area ILIKE ${searchPattern} OR o.address ILIKE ${searchPattern})
+          `;
+          return paginateResponse(dataRes, parseInt(countRes[0].cnt));
         }
-        const res = await sql`
+        const dataRes = await sql`
           SELECT oa.id, oa.outlet_id, oa.salesman_id, oa.assigned_at, oa.unassigned_at, oa.notes,
-                 o.name as outlet_name, o.branch_area,
-                 u.name as salesman_name
+                 o.name as outlet_name, o.branch_area, u.name as salesman_name
           FROM outlet_assignments oa
           LEFT JOIN outlets o ON oa.outlet_id = o.id
           LEFT JOIN users u ON oa.salesman_id = u.id
           WHERE oa.unassigned_at IS NULL
-          ORDER BY o.name
+            AND (o.name ILIKE ${searchPattern} OR o.branch_area ILIKE ${searchPattern} OR u.name ILIKE ${searchPattern})
+          ORDER BY o.name LIMIT ${limit} OFFSET ${offset}
         `;
-        return { statusCode: 200, body: JSON.stringify(res) };
+        const countRes = await sql`
+          SELECT COUNT(*) as cnt FROM outlet_assignments oa
+          LEFT JOIN outlets o ON oa.outlet_id = o.id
+          LEFT JOIN users u ON oa.salesman_id = u.id
+          WHERE oa.unassigned_at IS NULL
+            AND (o.name ILIKE ${searchPattern} OR o.branch_area ILIKE ${searchPattern} OR u.name ILIKE ${searchPattern})
+        `;
+        return paginateResponse(dataRes, parseInt(countRes[0].cnt));
       }
       if (type === 'targets') {
         const targetUserId = params.user_id;
         if (targetUserId) {
-          const res = await sql`SELECT * FROM targets WHERE user_id = ${targetUserId} ORDER BY year DESC, month DESC`;
-          return { statusCode: 200, body: JSON.stringify(res) };
+          const dataRes = await sql`
+            SELECT t.*, u.name as user_name FROM targets t
+            LEFT JOIN users u ON t.user_id = u.id
+            WHERE t.user_id = ${targetUserId}
+              AND (u.name ILIKE ${searchPattern} OR CAST(t.month AS TEXT) ILIKE ${searchPattern} OR CAST(t.year AS TEXT) ILIKE ${searchPattern})
+            ORDER BY t.year DESC, t.month DESC LIMIT ${limit} OFFSET ${offset}
+          `;
+          const countRes = await sql`
+            SELECT COUNT(*) as cnt FROM targets t
+            LEFT JOIN users u ON t.user_id = u.id
+            WHERE t.user_id = ${targetUserId}
+              AND (u.name ILIKE ${searchPattern} OR CAST(t.month AS TEXT) ILIKE ${searchPattern} OR CAST(t.year AS TEXT) ILIKE ${searchPattern})
+          `;
+          return paginateResponse(dataRes, parseInt(countRes[0].cnt));
         }
-        const res = await sql`SELECT * FROM targets ORDER BY year DESC, month DESC LIMIT 200`;
-        return { statusCode: 200, body: JSON.stringify(res) };
+        const dataRes = await sql`
+          SELECT t.*, u.name as user_name FROM targets t
+          LEFT JOIN users u ON t.user_id = u.id
+          WHERE (u.name ILIKE ${searchPattern} OR u.email ILIKE ${searchPattern} OR CAST(t.month AS TEXT) ILIKE ${searchPattern} OR CAST(t.year AS TEXT) ILIKE ${searchPattern})
+          ORDER BY t.year DESC, t.month DESC LIMIT ${limit} OFFSET ${offset}
+        `;
+        const countRes = await sql`
+          SELECT COUNT(*) as cnt FROM targets t
+          LEFT JOIN users u ON t.user_id = u.id
+          WHERE (u.name ILIKE ${searchPattern} OR u.email ILIKE ${searchPattern} OR CAST(t.month AS TEXT) ILIKE ${searchPattern} OR CAST(t.year AS TEXT) ILIKE ${searchPattern})
+        `;
+        return paginateResponse(dataRes, parseInt(countRes[0].cnt));
       }
       // Dashboard data
       if (!type && user) {
