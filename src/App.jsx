@@ -5,6 +5,7 @@ import { TrendingUp, Users, Store, Menu, Wifi, WifiOff, RefreshCw } from 'lucide
 import SalesDashboard from './components/SalesDashboard';
 import SupervisorDashboard from './components/SupervisorDashboard';
 import { OutletListView, OutletDetailView } from './components/OutletViews';
+import InstallPrompt from './components/InstallPrompt';
 
 function usePullToRefresh(enabled = true) {
   const [pulling, setPulling] = useState(false);
@@ -288,6 +289,9 @@ export default function App() {
           </button>
         </div>
       </div>
+
+      {/* PWA Install Prompt */}
+      <InstallPrompt />
     </div>
   );
 }
