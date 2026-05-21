@@ -148,10 +148,12 @@ const getUserDashboardData = async (userId) => {
   const totalBonus = percentageResult.bonus + volumeResult.bonus + activeResult.bonus;
 
   // SKU performance - current month detailed
-  const prevMonthStart = `${year}-${String(month === 1 ? 12 : month - 1).padStart(2, '0')}-01`;
-  const prevMonthEnd = `${year}-${String(month === 1 ? 12 : month - 1).padStart(2, '0')}-31`;
+  const prevMonthNum = month === 1 ? 12 : month - 1;
+  const prevMonthYear = month === 1 ? year - 1 : year;
+  const prevMonthStart = `${prevMonthYear}-${String(prevMonthNum).padStart(2, '0')}-01`;
+  const prevMonthEnd = `${prevMonthYear}-${String(prevMonthNum).padStart(2, '0')}-${String(new Date(prevMonthYear, prevMonthNum, 0).getDate()).padStart(2, '0')}`;
   const lastYearStart = `${year - 1}-${String(month).padStart(2, '0')}-01`;
-  const lastYearEnd = `${year - 1}-${String(month).padStart(2, '0')}-31`;
+  const lastYearEnd = `${year - 1}-${String(month).padStart(2, '0')}-${String(new Date(year - 1, month, 0).getDate()).padStart(2, '0')}`;
 
   const skuCurrent = await sql`
     SELECT 
