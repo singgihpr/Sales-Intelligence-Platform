@@ -1,9 +1,75 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { TrendingUp, Users, Store, Menu, Wifi, WifiOff } from 'lucide-react';
+import { useRegisterSW } from 'virtual:pwa-register/react';
+import { TrendingUp, Users, Store, Menu, Wifi, WifiOff, RefreshCw } from 'lucide-react';
 import SalesDashboard from './components/SalesDashboard';
 import SupervisorDashboard from './components/SupervisorDashboard';
 import { OutletListView, OutletDetailView } from './components/OutletViews';
+
+function usePullToRefresh(enabled = true) {
+  const [pulling, setPulling] = useState(false);
+  const [pullProgress, setPullProgress] = useState(0);
+  const [triggered, setTriggered] = useState(false);
+  const THRESHOLD = 80;
+
+  useEffect(() => {
+    if (!enabled) return;
+    if (window.matchMedia('(pointer: coarse)').matches === false) return;
+
+    let startY = 0;
+    let currentY = 0;
+    let isAtTop = false;
+
+    const onTouchStart = (e) => {
+      if (window.scrollY <= 5) {
+        isAtTop = true;
+        startY = e.touches[0].clientY;
+        currentY = startY;
+      }
+    };
+
+    const onTouchMove = (e) => {
+      if (!isAtTop) return;
+      currentY = e.touches[0].clientY;
+      const delta = currentY - startY;
+      if (delta > 0) {
+        e.preventDefault();
+        setPulling(true);
+        const progress = Math.min(delta / THRESHOLD, 1.5);
+        setPullProgress(progress);
+        if (delta >= THRESHOLD) {
+          setTriggered(true);
+        } else {
+          setTriggered(false);
+        }
+      }
+    };
+
+    const onTouchEnd = () => {
+      if (!isAtTop) return;
+      const delta = currentY - startY;
+      if (delta >= THRESHOLD) {
+        window.location.reload();
+      }
+      setPulling(false);
+      setPullProgress(0);
+      setTriggered(false);
+      isAtTop = false;
+    };
+
+    document.addEventListener('touchstart', onTouchStart, { passive: true });
+    document.addEventListener('touchmove', onTouchMove, { passive: false });
+    document.addEventListener('touchend', onTouchEnd, { passive: true });
+
+    return () => {
+      document.removeEventListener('touchstart', onTouchStart);
+      document.removeEventListener('touchmove', onTouchMove);
+      document.removeEventListener('touchend', onTouchEnd);
+    };
+  }, [enabled]);
+
+  return { pulling, pullProgress, triggered };
+}
 
 export default function App() {
   const navigate = useNavigate();
@@ -14,6 +80,18 @@ export default function App() {
   const [dashboardData, setDashboardData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  const { pulling, pullProgress, triggered } = usePullToRefresh(true);
+
+  // PWA silent auto-reload on update
+  useRegisterSW({
+    onNeedRefresh() {
+      window.location.reload();
+    },
+    onOfflineReady() {
+      console.log('App ready to work offline');
+    },
+  });
 
   const token = localStorage.getItem('token');
 
@@ -128,6 +206,25 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 font-sans text-slate-900 dark:text-slate-100">
+      {/* Pull to Refresh Indicator */}
+      {pulling && (
+        <div
+          className="fixed top-0 left-0 right-0 z-[60] flex items-center justify-center pointer-events-none"
+          style={{
+            transform: `translateY(${Math.min(pullProgress * 60, 60)}px)`,
+            opacity: Math.min(pullProgress * 2, 1),
+            transition: 'transform 0.1s ease-out'
+          }}
+        >
+          <div className="bg-white/90 dark:bg-slate-800/90 backdrop-blur-md rounded-full shadow-lg border border-slate-100 dark:border-slate-700 px-4 py-2 flex items-center gap-2">
+            <RefreshCw className={`w-4 h-4 ${triggered ? 'text-emerald-500 animate-spin' : 'text-slate-400'}`} />
+            <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
+              {triggered ? 'Release to refresh' : 'Pull down to refresh'}
+            </span>
+          </div>
+        </div>
+      )}
+
       <nav className="sticky top-0 z-50 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md border-b border-slate-100 dark:border-slate-800 px-4 py-3">
         <div className="flex items-center justify-between max-w-lg mx-auto">
           <div className="flex items-center gap-3">
