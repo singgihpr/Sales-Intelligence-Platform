@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Upload, RefreshCw, Edit2, Trash2, Plus, Users, Database, Store, X, LogOut, ArrowLeft, Link2, Target, Award } from 'lucide-react';
+import { Upload, RefreshCw, Edit2, Trash2, Plus, Users, Database, Store, X, LogOut, ArrowLeft, Link2, Target, Award, Download, FileSpreadsheet } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -113,6 +114,35 @@ export default function AdminDashboard() {
     } catch(e) { setMessage('❌ Upload failed'); }
   };
 
+  const downloadCsvTemplate = () => {
+    const link = document.createElement('a');
+    link.href = '/templates/upload-template.csv';
+    link.download = 'upload-template.csv';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const downloadXlsxTemplate = () => {
+    const data = [
+      ['Outlet Name', 'Sales Name', 'Date', 'Volume BE', 'SKU'],
+      ['Toko Buah Sejahtera', 'Budi Santoso', '2026-05-03', 45.5, 'Pisang Cavendish'],
+      ['Toko Buah Sejahtera', 'Budi Santoso', '2026-05-10', 52.0, 'Nanas Madu'],
+      ['Fresh Market Cilandak', 'Budi Santoso', '2026-05-05', 85.0, 'Jeruk Siam'],
+      ['Fresh Market Cilandak', 'Budi Santoso', '2026-05-12', 35.5, 'Apel Fuji'],
+      ['RM Padang Sederhana', 'Budi Santoso', '2026-05-08', 28.0, 'Semangka Merah'],
+      ['Resto Ayam Penyet', 'Dewi Lestari', '2026-05-02', 40.0, 'Mangga Harum Manis'],
+      ['Resto Ayam Penyet', 'Dewi Lestari', '2026-05-07', 55.0, 'Pisang Cavendish'],
+      ['Indomaret Point', 'Dewi Lestari', '2026-05-04', 62.5, 'Nanas Madu'],
+      ['Indomaret Point', 'Dewi Lestari', '2026-05-11', 48.0, 'Jeruk Siam'],
+      ['Warung Kopi Nusantara', 'Dewi Lestari', '2026-05-09', 33.5, 'Apel Fuji']
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Data');
+    XLSX.writeFile(wb, 'upload-template.xlsx');
+  };
+
   const openRecordEdit = (r = null) => { setEditingRecord(r); setRecForm(r || { outlet: '', sales: '', date: '', be: '', sku: '' }); setShowRecForm(true); };
   const openUserEdit = (u = null) => { setEditingUser(u); setUserForm(u || { name: '', email: '', role: 'sales', region: '', level: 'L2', password: '' }); setShowUserForm(true); };
   const openOutletEdit = (o = null) => { setEditingOutlet(o); setOutletForm(o || { name: '', type: '', address: '', contact_person: '', branch_area: '' }); setShowOutletForm(true); };
@@ -166,9 +196,9 @@ export default function AdminDashboard() {
         {activeTab === 'records' && (
           <div className="space-y-6">
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6 space-y-4">
-              <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-end">
+              <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-end flex-wrap">
                 <input type="file" accept=".csv,.xlsx,.xls" onChange={handleFileSelect} className="block w-full sm:w-auto text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100" />
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                   <button onClick={handlePreview} disabled={!uploadFile || previewLoading} className="px-4 py-2 bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-400 rounded-lg text-sm font-semibold hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed">
                     {previewLoading ? 'Previewing...' : 'Preview'}
                   </button>
@@ -177,7 +207,17 @@ export default function AdminDashboard() {
                   </button>
                 </div>
               </div>
-              <p className="text-xs text-slate-500">Required columns: <code>Outlet Name, Sales Name, Date, Volume BE</code> &bull; Optional: <code>SKU</code></p>
+              <div className="flex flex-col sm:flex-row gap-2 sm:items-center justify-between">
+                <p className="text-xs text-slate-500">Required columns: <code>Outlet Name, Sales Name, Date, Volume BE</code> &bull; Optional: <code>SKU</code></p>
+                <div className="flex gap-2">
+                  <button onClick={downloadCsvTemplate} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-300 rounded-lg text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors border border-slate-200 dark:border-slate-700">
+                    <Download className="w-3.5 h-3.5" /> Template CSV
+                  </button>
+                  <button onClick={downloadXlsxTemplate} className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-300 rounded-lg text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors border border-slate-200 dark:border-slate-700">
+                    <FileSpreadsheet className="w-3.5 h-3.5" /> Template XLSX
+                  </button>
+                </div>
+              </div>
             </div>
 
             {previewData && (
