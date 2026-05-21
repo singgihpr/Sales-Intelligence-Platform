@@ -166,7 +166,9 @@ const getUserDashboardData = async (userId) => {
     GROUP BY o.id, o.name, o.type, o.address, o.contact_person, o.branch_area
   `;
 
-  const daysElapsed = Math.min(new Date().getDate(), 22);
+  const now = new Date();
+  const daysElapsed = now.getDate();
+  const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
 
   return {
     user,
@@ -175,6 +177,7 @@ const getUserDashboardData = async (userId) => {
       currentBE,
       daysElapsed,
       totalWorkingDays: 22,
+      daysInMonth,
       percentageConfig: targetData.percentage_config,
       volumeConfig: targetData.volume_config,
       activeOutletsConfig: targetData.active_outlets_config
@@ -195,7 +198,8 @@ const getUserDashboardData = async (userId) => {
       };
     }),
     skuPerformance: skuRows.map(r => ({ name: r.sku_name, volume: parseFloat(r.volume), trend: 0 })),
-    daysElapsed
+    daysElapsed,
+    daysInMonth
   };
 };
 

@@ -31,7 +31,7 @@ const Card = ({ children, className = "", onClick }) => (
 );
 
 export default function SalesDashboard({ data, onVisitClick }) {
-  const { user, dashboardStats, bonusSummary, outlets, skuPerformance, daysElapsed } = data || {};
+  const { user, dashboardStats, bonusSummary, outlets, skuPerformance, daysElapsed, daysInMonth } = data || {};
   const [isSimulating, setIsSimulating] = useState(false);
   const [simulatedBE, setSimulatedBE] = useState(dashboardStats?.currentBE || 0);
 
@@ -41,14 +41,15 @@ export default function SalesDashboard({ data, onVisitClick }) {
     ? (dashboardStats.currentBE / dashboardStats.monthlyTargetBE) * 100
     : 0;
   const runRate = daysElapsed > 0
-    ? (dashboardStats.currentBE / daysElapsed) * dashboardStats.totalWorkingDays
+    ? (dashboardStats.currentBE / daysElapsed) * daysInMonth
     : 0;
   const projectedAttainment = dashboardStats.monthlyTargetBE > 0
     ? (runRate / dashboardStats.monthlyTargetBE) * 100
     : 0;
-  const daysLeft = dashboardStats.totalWorkingDays - daysElapsed;
+  const daysLeft = daysInMonth - daysElapsed;
+  const shortfall = Math.max(0, dashboardStats.monthlyTargetBE - dashboardStats.currentBE);
   const shortfallPerDay = daysLeft > 0
-    ? ((dashboardStats.monthlyTargetBE - dashboardStats.currentBE) / daysLeft).toFixed(1)
+    ? (shortfall / daysLeft).toFixed(1)
     : 0;
 
   const simAttainment = dashboardStats.monthlyTargetBE > 0
@@ -111,7 +112,10 @@ export default function SalesDashboard({ data, onVisitClick }) {
           <div className="bg-emerald-500 p-2 rounded-xl text-white"><Target className="w-5 h-5" /></div>
           <div>
             <p className="text-xs font-semibold text-emerald-800 dark:text-emerald-400 uppercase tracking-tight">Kebutuhan Harian</p>
-            <p className="text-sm text-emerald-900 dark:text-emerald-200 mt-0.5">Anda butuh <span className="font-bold">{shortfallPerDay} BE per hari</span> untuk mencapai target 100%.</p>
+            <p className="text-sm text-emerald-900 dark:text-emerald-200 mt-0.5">
+              Anda butuh <span className="font-bold">{shortfallPerDay} BE per hari</span> untuk mencapai target 100%
+              <span className="text-emerald-700/70 dark:text-emerald-500/70"> ({daysLeft} hari tersisa)</span>.
+            </p>
           </div>
         </div>
       </div>
@@ -123,9 +127,12 @@ export default function SalesDashboard({ data, onVisitClick }) {
       <section>
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-bold text-slate-900 dark:text-white">Simulasi Bonus "What-If"</h3>
-          <span className="text-xs text-blue-600 font-semibold cursor-pointer select-none" onClick={() => setIsSimulating(!isSimulating)}>
+          <button
+            onClick={() => setIsSimulating(!isSimulating)}
+            className="px-3 py-1.5 bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-400 rounded-lg text-xs font-bold hover:bg-blue-100 dark:hover:bg-blue-900/50 active:scale-95 transition-all border border-blue-200 dark:border-blue-800"
+          >
             {isSimulating ? 'Tutup Simulasi' : 'Buka Simulasi'}
-          </span>
+          </button>
         </div>
         {isSimulating && (
           <Card className="space-y-4">
