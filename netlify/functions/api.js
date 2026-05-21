@@ -147,12 +147,75 @@ const getUserDashboardData = async (userId) => {
 
   const totalBonus = percentageResult.bonus + volumeResult.bonus + activeResult.bonus;
 
-  // SKU performance
-  const skuRows = await sql`
-    SELECT sku_name, SUM(volume_be) as volume FROM sales_records
-    WHERE sales_id = ${userId} AND record_date >= ${start} AND sku_name IS NOT NULL AND sku_name <> ''
+  // SKU performance - current month detailed
+  const prevMonthStart = `${year}-${String(month === 1 ? 12 : month - 1).padStart(2, '0')}-01`;
+  const prevMonthEnd = `${year}-${String(month === 1 ? 12 : month - 1).padStart(2, '0')}-31`;
+  const lastYearStart = `${year - 1}-${String(month).padStart(2, '0')}-01`;
+  const lastYearEnd = `${year - 1}-${String(month).padStart(2, '0')}-31`;
+
+  const skuCurrent = await sql`
+    SELECT 
+      sku_name,
+      SUM(volume_be) as volume,
+      COUNT(*) as transaction_count,
+      AVG(volume_be) as avg_order
+    FROM sales_records
+    WHERE sales_id = ${userId} AND record_date >= ${start} AND record_date <= ${end}
+      AND sku_name IS NOT NULL AND sku_name <> ''
     GROUP BY sku_name ORDER BY volume DESC LIMIT 5
   `;
+
+  const skuPrevMonth = await sql`
+    SELECT sku_name, SUM(volume_be) as volume FROM sales_records
+    WHERE sales_id = ${userId} AND record_date >= ${prevMonthStart} AND record_date <= ${prevMonthEnd}
+      AND sku_name IS NOT NULL AND sku_name <> ''
+    GROUP BY sku_name
+  `;
+
+  const skuLastYear = await sql`
+    SELECT sku_name, SUM(volume_be) as volume FROM sales_records
+    WHERE sales_id = ${userId} AND record_date >= ${lastYearStart} AND record_date <= ${lastYearEnd}
+      AND sku_name IS NOT NULL AND sku_name <> ''
+    GROUP BY sku_name
+  `;
+
+  // Get top outlet per SKU for current month
+  const skuTopOutlets = await sql`
+    SELECT DISTINCT ON (sku_name)
+      sku_name,
+      o.name as outlet_name,
+      SUM(volume_be) as outlet_volume
+    FROM sales_records sr
+    LEFT JOIN outlets o ON o.id = sr.outlet_id
+    WHERE sr.sales_id = ${userId} AND sr.record_date >= ${start} AND sr.record_date <= ${end}
+      AND sr.sku_name IS NOT NULL AND sr.sku_name <> ''
+    GROUP BY sr.sku_name, o.name
+    ORDER BY sr.sku_name, outlet_volume DESC
+  `;
+
+  const prevMonthMap = Object.fromEntries(skuPrevMonth.map(r => [r.sku_name, parseFloat(r.volume || 0)]));
+  const lastYearMap = Object.fromEntries(skuLastYear.map(r => [r.sku_name, parseFloat(r.volume || 0)]));
+  const topOutletMap = Object.fromEntries(skuTopOutlets.map(r => [r.sku_name, r.outlet_name]));
+
+  const totalSkuVolume = skuCurrent.reduce((sum, r) => sum + parseFloat(r.volume || 0), 0);
+
+  const skuPerformance = skuCurrent.map(r => {
+    const volume = parseFloat(r.volume || 0);
+    const prev = prevMonthMap[r.sku_name] || 0;
+    const lastY = lastYearMap[r.sku_name] || 0;
+    const momTrend = prev > 0 ? ((volume - prev) / prev) * 100 : (volume > 0 ? 100 : 0);
+    const yoyTrend = lastY > 0 ? ((volume - lastY) / lastY) * 100 : (volume > 0 ? 100 : 0);
+    return {
+      name: r.sku_name,
+      volume,
+      transactionCount: parseInt(r.transaction_count || 0),
+      avgOrder: parseFloat(r.avg_order || 0),
+      topOutlet: topOutletMap[r.sku_name] || '-',
+      mixPercent: totalSkuVolume > 0 ? (volume / totalSkuVolume) * 100 : 0,
+      momTrend,
+      yoyTrend
+    };
+  });
 
   // Outlets data
   const outletRows = await sql`
@@ -197,7 +260,7 @@ const getUserDashboardData = async (userId) => {
         alert: daysSince > 7 ? 'Risk of Churn' : null
       };
     }),
-    skuPerformance: skuRows.map(r => ({ name: r.sku_name, volume: parseFloat(r.volume), trend: 0 })),
+    skuPerformance,
     daysElapsed,
     daysInMonth
   };

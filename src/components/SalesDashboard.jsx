@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowUpRight, ArrowDownRight, Target, Package, ShoppingBag, Navigation, CheckCircle } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, Target, Package, ShoppingBag, Navigation, CheckCircle, Info, ChevronDown, ChevronUp, TrendingUp, TrendingDown, Minus, BarChart3 } from 'lucide-react';
 import { BonusSummaryCard, PercentageBonusCard, VolumeBonusCard, ActiveOutletsBonusCard } from './BonusCards';
 
 const ProgressCircle = ({ percent, size = 160, strokeWidth = 12 }) => {
@@ -189,26 +189,7 @@ export default function SalesDashboard({ data, onVisitClick }) {
       </section>
 
       {/* Product Analysis (SKU) */}
-      <section>
-        <div className="flex items-center justify-between mb-3 px-1">
-          <h3 className="font-bold flex items-center gap-2"><ShoppingBag className="w-4 h-4 text-orange-500" /> Analisa Produk</h3>
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Volume (BE)</span>
-        </div>
-        <Card className="space-y-4">
-          {(skuPerformance || []).length === 0 && <p className="text-xs text-slate-400 text-center py-4">Tidak ada data SKU untuk bulan ini.</p>}
-          {(skuPerformance || []).map((sku, idx) => (
-            <div key={idx} className="space-y-1.5">
-              <div className="flex justify-between text-xs font-bold">
-                <span className="text-slate-600 dark:text-slate-300">{sku.name}</span>
-                <span className="flex items-center gap-1">{sku.volume.toFixed(1)} BE <span className={sku.trend > 0 ? 'text-emerald-500' : 'text-red-500'}>({sku.trend > 0 ? '+' : ''}{sku.trend}%)</span></span>
-              </div>
-              <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                <div className="h-full bg-orange-400 rounded-full" style={{ width: `${Math.min((sku.volume / (skuPerformance[0]?.volume || 1)) * 100, 100)}%` }}></div>
-              </div>
-            </div>
-          ))}
-        </Card>
-      </section>
+      <SkuAnalysisSection skuPerformance={skuPerformance} />
 
       {/* Activity Schedule (Visits) */}
       <section>
@@ -262,5 +243,128 @@ export default function SalesDashboard({ data, onVisitClick }) {
         </div>
       </section>
     </div>
+  );
+}
+
+// --- SKU Analysis Sub-component ---
+function SkuAnalysisSection({ skuPerformance }) {
+  const [showInfo, setShowInfo] = useState(false);
+  const [expandedIdx, setExpandedIdx] = useState(null);
+
+  const formatTrend = (val) => {
+    if (val > 0) return { icon: TrendingUp, color: 'text-emerald-600', bg: 'bg-emerald-50', sign: '+' };
+    if (val < 0) return { icon: TrendingDown, color: 'text-red-600', bg: 'bg-red-50', sign: '' };
+    return { icon: Minus, color: 'text-slate-400', bg: 'bg-slate-50', sign: '' };
+  };
+
+  return (
+    <section>
+      <div className="flex items-center justify-between mb-3 px-1">
+        <h3 className="font-bold flex items-center gap-2"><ShoppingBag className="w-4 h-4 text-orange-500" /> Analisa Produk</h3>
+        <button onClick={() => setShowInfo(true)} className="flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-orange-500 transition-colors">
+          <Info className="w-3.5 h-3.5" /> Info
+        </button>
+      </div>
+
+      {/* Info Modal */}
+      {showInfo && (
+        <div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 rounded-t-2xl sm:rounded-2xl shadow-xl w-full sm:max-w-sm p-6 space-y-4 animate-in slide-in-from-bottom-4 duration-300">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2"><BarChart3 className="w-5 h-5 text-orange-500" /> Analisa Produk</h3>
+              <button onClick={() => setShowInfo(false)} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"><ChevronDown className="w-5 h-5 text-slate-500" /></button>
+            </div>
+            <div className="space-y-3 text-sm text-slate-600 dark:text-slate-300">
+              <p><strong>Ranking:</strong> Diurutkan berdasarkan total <strong>Box Equivalent (BE)</strong> bulan ini.</p>
+              <p><strong>MoM Trend:</strong> Perbandingan volume bulan ini vs <strong>bulan lalu</strong>.</p>
+              <p><strong>YoY Trend:</strong> Perbandingan volume bulan ini vs <strong>bulan yang sama tahun lalu</strong>.</p>
+              <p><strong>Mix %:</strong> Kontribusi SKU terhadap total BE semua produk.</p>
+              <p><strong>Transaksi:</strong> Jumlah catatan/entry untuk SKU tersebut.</p>
+              <p><strong>Rata-rata:</strong> Volume BE rata-rata per transaksi.</p>
+            </div>
+            <button onClick={() => setShowInfo(false)} className="w-full py-2.5 bg-orange-500 text-white rounded-xl font-bold text-sm hover:bg-orange-600 active:scale-95 transition-all">
+              Mengerti
+            </button>
+          </div>
+        </div>
+      )}
+
+      <Card className="space-y-3">
+        {(skuPerformance || []).length === 0 && (
+          <p className="text-xs text-slate-400 text-center py-4">Tidak ada data SKU untuk bulan ini.</p>
+        )}
+        {(skuPerformance || []).map((sku, idx) => {
+          const isExpanded = expandedIdx === idx;
+          const mom = formatTrend(sku.momTrend);
+          const yoy = formatTrend(sku.yoyTrend);
+          const MomIcon = mom.icon;
+          const YoyIcon = yoy.icon;
+          const barWidth = skuPerformance.length > 0 ? Math.min((sku.volume / (skuPerformance[0].volume || 1)) * 100, 100) : 0;
+
+          return (
+            <div key={idx} className="space-y-2">
+              {/* Main Row */}
+              <button
+                onClick={() => setExpandedIdx(isExpanded ? null : idx)}
+                className="w-full text-left group"
+              >
+                <div className="flex items-center justify-between text-xs font-bold mb-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-700 dark:text-slate-200">{sku.name}</span>
+                    <span className="text-[10px] font-medium text-slate-400">({sku.mixPercent.toFixed(1)}%)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-600 dark:text-slate-300">{sku.volume.toFixed(1)} BE</span>
+                    {isExpanded ? <ChevronUp className="w-3.5 h-3.5 text-slate-400" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-400" />}
+                  </div>
+                </div>
+                <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                  <div className="h-full bg-orange-400 rounded-full transition-all duration-500" style={{ width: `${barWidth}%` }}></div>
+                </div>
+              </button>
+
+              {/* Expanded Detail */}
+              {isExpanded && (
+                <div className="bg-slate-50 dark:bg-slate-800/40 rounded-xl p-3 space-y-2.5 animate-in fade-in slide-in-from-top-2 duration-200">
+                  {/* Trends */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className={`flex items-center gap-1.5 p-2 rounded-lg ${mom.bg} dark:bg-opacity-20`}>
+                      <MomIcon className={`w-3.5 h-3.5 ${mom.color}`} />
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase">vs Bulan Lalu</p>
+                        <p className={`text-xs font-bold ${mom.color}`}>{mom.sign}{sku.momTrend.toFixed(1)}%</p>
+                      </div>
+                    </div>
+                    <div className={`flex items-center gap-1.5 p-2 rounded-lg ${yoy.bg} dark:bg-opacity-20`}>
+                      <YoyIcon className={`w-3.5 h-3.5 ${yoy.color}`} />
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase">vs Tahun Lalu</p>
+                        <p className={`text-xs font-bold ${yoy.color}`}>{yoy.sign}{sku.yoyTrend.toFixed(1)}%</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Metrics */}
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="bg-white dark:bg-slate-800 rounded-lg p-2">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase">Transaksi</p>
+                      <p className="text-sm font-bold text-slate-800 dark:text-white">{sku.transactionCount}</p>
+                    </div>
+                    <div className="bg-white dark:bg-slate-800 rounded-lg p-2">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase">Rata-rata</p>
+                      <p className="text-sm font-bold text-slate-800 dark:text-white">{sku.avgOrder.toFixed(1)} BE</p>
+                    </div>
+                    <div className="bg-white dark:bg-slate-800 rounded-lg p-2">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase">Top Outlet</p>
+                      <p className="text-sm font-bold text-slate-800 dark:text-white truncate" title={sku.topOutlet}>{sku.topOutlet}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </Card>
+    </section>
   );
 }
