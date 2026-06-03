@@ -94,7 +94,8 @@ const getCurrentMonthRange = () => {
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
   const start = `${year}-${String(month).padStart(2, '0')}-01`;
-  const end = `${year}-${String(month).padStart(2, '0')}-31`;
+  const lastDay = String(new Date(year, month, 0).getDate()).padStart(2, '0');
+  const end = `${year}-${String(month).padStart(2, '0')}-${lastDay}`;
   return { month, year, start, end };
 };
 
