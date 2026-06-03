@@ -19,9 +19,9 @@ export default function SupervisorDashboard({ data, onNavigate }) {
 
   const fetchUsers = async () => {
     try {
-      const res = await fetch('/.netlify/functions/api?type=users', { headers: { Authorization: `Bearer ${token}` } });
-      const data = await res.json();
-      setUsers(data.filter(u => u.role === 'sales'));
+      const res = await fetch('/.netlify/functions/api?type=users&limit=9999&search=', { headers: { Authorization: `Bearer ${token}` } });
+      const result = await res.json();
+      setUsers((result.data || []).filter(u => u.role === 'sales'));
     } catch (e) { console.error(e); }
   };
 

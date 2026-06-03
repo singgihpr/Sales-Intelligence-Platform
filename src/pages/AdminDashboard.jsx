@@ -54,6 +54,7 @@ export default function AdminDashboard() {
   const [assignments, setAssignments] = useState([]);
   const [vacantOutlets, setVacantOutlets] = useState([]);
   const [targets, setTargets] = useState([]);
+  const [allSalesUsers, setAllSalesUsers] = useState([]);
 
   const [pagination, setPagination] = useState({
     records: { page: 1, limit: 10, total: 0, search: '' },
@@ -121,7 +122,16 @@ export default function AdminDashboard() {
     setLoading(false);
   };
 
-  useEffect(() => { fetchAll(); }, []);
+  const fetchAllSalesUsers = async () => {
+    try {
+      const res = await fetch(`/.netlify/functions/api?type=users&limit=9999&search=`, { headers: { 'Authorization': `Bearer ${token}` } });
+      if (!res.ok) throw new Error(await res.text());
+      const result = await res.json();
+      setAllSalesUsers((result.data || []).filter(u => u.role === 'sales'));
+    } catch (e) { /* silently ignore to avoid disrupting UI */ }
+  };
+
+  useEffect(() => { fetchAll(); fetchAllSalesUsers(); }, []);
   useEffect(() => { if (showVacant) fetchTable('vacant'); }, [showVacant]);
 
   const handleLogout = () => {
@@ -217,8 +227,6 @@ export default function AdminDashboard() {
     { id: 'assignments', label: 'Assignments', icon: Link2 },
     { id: 'targets', label: 'Bonus Targets', icon: Target }
   ];
-
-  const salesUsers = users.filter(u => u.role === 'sales');
 
   const formatRp = (n) => 'Rp ' + (Number(n)||0).toLocaleString('id-ID');
 
@@ -435,7 +443,7 @@ export default function AdminDashboard() {
             {showAssignForm && (
               <form onSubmit={(e) => { e.preventDefault(); handleCrud('assignments', 'POST', null, assignForm, setAssignments, () => { setShowAssignForm(false); setAssignForm({ outlet_id: '', salesman_id: '', notes: '' }); }); }} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6 grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                 <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Outlet</label><select required value={assignForm.outlet_id} onChange={e=>setAssignForm({...assignForm, outlet_id:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800"><option value="" disabled>Select Outlet</option>{outlets.map(o => <option key={o.id} value={o.id}>{o.name} {o.branch_area ? `(${o.branch_area})` : ''}</option>)}</select></div>
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Salesman</label><select value={assignForm.salesman_id} onChange={e=>setAssignForm({...assignForm, salesman_id:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800"><option value="">Vacant</option>{salesUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}</select></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Salesman</label><select value={assignForm.salesman_id} onChange={e=>setAssignForm({...assignForm, salesman_id:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800"><option value="">Vacant</option>{allSalesUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}</select></div>
                 <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Notes</label><input value={assignForm.notes} onChange={e=>setAssignForm({...assignForm, notes:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder="Optional notes" /></div>
                 <div className="md:col-span-1 flex gap-2"><button type="submit" className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">Assign</button><button type="button" onClick={()=>setShowAssignForm(false)} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg"><X className="w-4 h-4 mx-auto"/></button></div>
               </form>
@@ -485,10 +493,10 @@ export default function AdminDashboard() {
             {showTargetForm && (
               <form onSubmit={(e) => {
                 e.preventDefault();
-                const body = { ...targetForm, level: salesUsers.find(u => u.id === targetForm.user_id)?.level || 'L2' };
+                const body = { ...targetForm, level: allSalesUsers.find(u => u.id === targetForm.user_id)?.level || 'L2' };
                 handleCrud('targets', editingTarget ? 'PUT' : 'POST', editingTarget?.id, body, setTargets, () => { setShowTargetForm(false); setTargetForm({ user_id: '', month: new Date().getMonth()+1, year: new Date().getFullYear(), target_be: 2000 }); setEditingTarget(null); });
               }} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6 grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Salesman</label><select required value={targetForm.user_id} onChange={e=>setTargetForm({...targetForm, user_id:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800"><option value="" disabled>Select Salesman</option>{salesUsers.map(u => <option key={u.id} value={u.id}>{u.name} ({u.level||'-'})</option>)}</select></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Salesman</label><select required value={targetForm.user_id} onChange={e=>setTargetForm({...targetForm, user_id:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800"><option value="" disabled>Select Salesman</option>{allSalesUsers.map(u => <option key={u.id} value={u.id}>{u.name} ({u.level||'-'})</option>)}</select></div>
                 <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Month</label><input type="number" min="1" max="12" required value={targetForm.month} onChange={e=>setTargetForm({...targetForm, month:Number(e.target.value)})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" /></div>
                 <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Year</label><input type="number" min="2024" max="2100" required value={targetForm.year} onChange={e=>setTargetForm({...targetForm, year:Number(e.target.value)})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" /></div>
                 <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Target BE</label><input type="number" step="0.1" required value={targetForm.target_be} onChange={e=>setTargetForm({...targetForm, target_be:Number(e.target.value)})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" /></div>
