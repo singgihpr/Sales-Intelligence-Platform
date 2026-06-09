@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, ArrowLeft, Calendar, MessageSquare, History, MapPin, ChevronRight, Info, X } from 'lucide-react';
+import { Search, ArrowLeft, Calendar, MessageSquare, History, MapPin, ChevronRight, Info, X, ChevronLeft, ChevronDown, TrendingUp, TrendingDown, Activity } from 'lucide-react';
 
 const OHSInfoModal = ({ open, onClose }) => {
   if (!open) return null;
@@ -13,34 +13,35 @@ const OHSInfoModal = ({ open, onClose }) => {
           </button>
         </div>
         <p className="text-xs text-slate-500 leading-relaxed">
-          OHS menunjukkan seberapa &quot;sehat&quot; outlet berdasarkan waktu transaksi terakhir. Semakin tinggi skor, semakin aktif outlet tersebut.
+          OHS menunjukkan seberapa &quot;sehat&quot; outlet berdasarkan historical transaksi 3 bulan terakhir. Semakin tinggi skor, semakin sehat outlet tersebut.
         </p>
         <div className="space-y-2">
           <div className="flex items-center gap-3 p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900">
             <div className="w-3 h-3 rounded-full bg-emerald-500 shrink-0" />
             <div className="flex-1">
-              <p className="text-sm font-bold text-emerald-800 dark:text-emerald-400">80 - 100</p>
-              <p className="text-[10px] text-emerald-700/70 dark:text-emerald-500/70">Sangat Aktif — transaksi dalam 7 hari terakhir</p>
+              <p className="text-sm font-bold text-emerald-800 dark:text-emerald-400">70 - 100</p>
+              <p className="text-[10px] text-emerald-700/70 dark:text-emerald-500/70">Sehat — volume & trend BE stabil/naik, transaksi rutin</p>
             </div>
           </div>
           <div className="flex items-center gap-3 p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-900">
             <div className="w-3 h-3 rounded-full bg-amber-500 shrink-0" />
             <div className="flex-1">
-              <p className="text-sm font-bold text-amber-800 dark:text-amber-400">50 - 79</p>
-              <p className="text-[10px] text-amber-700/70 dark:text-amber-500/70">Perlu Perhatian — transaksi 7-25 hari lalu</p>
+              <p className="text-sm font-bold text-amber-800 dark:text-amber-400">40 - 69</p>
+              <p className="text-[10px] text-amber-700/70 dark:text-amber-500/70">Perlu Perhatian — volume atau trend BE menurun</p>
             </div>
           </div>
           <div className="flex items-center gap-3 p-2.5 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-100 dark:border-red-900">
             <div className="w-3 h-3 rounded-full bg-red-500 shrink-0" />
             <div className="flex-1">
-              <p className="text-sm font-bold text-red-800 dark:text-red-400">0 - 49</p>
-              <p className="text-[10px] text-red-700/70 dark:text-red-500/70">Berisiko Churn — transaksi &gt;25 hari lalu</p>
+              <p className="text-sm font-bold text-red-800 dark:text-red-400">0 - 39</p>
+              <p className="text-[10px] text-red-700/70 dark:text-red-500/70">Tidak Sehat — volume BE rendah atau turun drastis</p>
             </div>
           </div>
         </div>
-        <p className="text-[10px] text-slate-400 text-center pt-1">
-          Rumus: <code>100 - (hari sejak transaksi terakhir &times; 2)</code>
-        </p>
+        <div className="text-[10px] text-slate-400 text-center pt-1 space-y-1">
+          <p><strong>Rumus:</strong> Kombinasi 3 faktor (3 bulan terakhir)</p>
+          <p>40% Volume BE + 40% Trend MoM + 20% Frekuensi Transaksi</p>
+        </div>
         <button onClick={onClose} className="w-full py-2.5 bg-emerald-600 text-white rounded-xl font-bold text-sm hover:bg-emerald-700 active:scale-95 transition-all">
           Mengerti
         </button>
@@ -51,8 +52,8 @@ const OHSInfoModal = ({ open, onClose }) => {
 
 const HealthBadge = ({ score, onClick }) => {
   let colorClass = "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400";
-  if (score >= 50) colorClass = "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400";
-  if (score >= 80) colorClass = "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400";
+  if (score >= 40) colorClass = "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400";
+  if (score >= 70) colorClass = "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400";
   return (
     <button
       onClick={onClick}
@@ -69,13 +70,57 @@ const Card = ({ children, className = "", onClick }) => (
   </div>
 );
 
+// Progress bar component for OHS breakdown
+const ProgressBar = ({ label, value, color, percentage }) => (
+  <div className="space-y-1.5">
+    <div className="flex justify-between items-center">
+      <span className="text-[10px] font-bold text-slate-500 uppercase">{label}</span>
+      <span className="text-[10px] font-bold text-slate-700">{value} <span className="text-slate-400">({percentage}%)</span></span>
+    </div>
+    <div className="h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+      <div 
+        className={`h-full rounded-full transition-all duration-500 ${color}`}
+        style={{ width: `${Math.min(value, 100)}%` }}
+      />
+    </div>
+  </div>
+);
+
 export function OutletListView({ outlets, onSelectOutlet }) {
   const [search, setSearch] = useState("");
   const [showInfo, setShowInfo] = useState(false);
-  const filtered = (outlets || []).filter(o =>
-    o.name.toLowerCase().includes(search.toLowerCase()) ||
-    (o.branchArea || '').toLowerCase().includes(search.toLowerCase())
-  );
+  const [filterOHS, setFilterOHS] = useState('all'); // all, healthy, warning, unhealthy
+  const [sortBy, setSortBy] = useState('ohs-desc'); // ohs-desc, ohs-asc, be-desc, name-asc
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+  // Filter
+  let filtered = (outlets || []).filter(o => {
+    const matchSearch = o.name.toLowerCase().includes(search.toLowerCase()) ||
+      (o.branchArea || '').toLowerCase().includes(search.toLowerCase());
+    
+    if (!matchSearch) return false;
+    
+    if (filterOHS === 'healthy') return o.health >= 70;
+    if (filterOHS === 'warning') return o.health >= 40 && o.health < 70;
+    if (filterOHS === 'unhealthy') return o.health < 40;
+    return true;
+  });
+
+  // Sort
+  filtered.sort((a, b) => {
+    switch (sortBy) {
+      case 'ohs-desc': return b.health - a.health;
+      case 'ohs-asc': return a.health - b.health;
+      case 'be-desc': return b.beMonth - a.beMonth;
+      case 'name-asc': return a.name.localeCompare(b.name);
+      default: return 0;
+    }
+  });
+
+  // Pagination
+  const totalPages = Math.ceil(filtered.length / itemsPerPage);
+  const paginated = filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   return (
     <div className="space-y-4 pb-32 animate-in fade-in">
@@ -86,13 +131,51 @@ export function OutletListView({ outlets, onSelectOutlet }) {
         </button>
       </div>
 
+      {/* Search */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-        <input type="text" placeholder="Cari nama outlet atau area..." className="w-full bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <input 
+          type="text" 
+          placeholder="Cari nama outlet atau area..." 
+          className="w-full bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl py-3 pl-10 pr-4 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" 
+          value={search} 
+          onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }} 
+        />
       </div>
 
+      {/* Filter & Sort */}
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <select 
+            value={filterOHS} 
+            onChange={(e) => { setFilterOHS(e.target.value); setCurrentPage(1); }}
+            className="w-full appearance-none bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl py-2.5 pl-3 pr-8 text-xs font-bold text-slate-600 focus:ring-2 focus:ring-emerald-500 outline-none"
+          >
+            <option value="all">Semua Status</option>
+            <option value="healthy">Sehat (≥70)</option>
+            <option value="warning">Perlu Perhatian (40-69)</option>
+            <option value="unhealthy">Tidak Sehat (&lt;40)</option>
+          </select>
+          <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+        </div>
+        <div className="relative flex-1">
+          <select 
+            value={sortBy} 
+            onChange={(e) => setSortBy(e.target.value)}
+            className="w-full appearance-none bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl py-2.5 pl-3 pr-8 text-xs font-bold text-slate-600 focus:ring-2 focus:ring-emerald-500 outline-none"
+          >
+            <option value="ohs-desc">OHS Tertinggi</option>
+            <option value="ohs-asc">OHS Terendah</option>
+            <option value="be-desc">BE Tertinggi</option>
+            <option value="name-asc">Nama A-Z</option>
+          </select>
+          <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+        </div>
+      </div>
+
+      {/* Outlet List */}
       <div className="space-y-3">
-        {filtered.map(outlet => (
+        {paginated.map(outlet => (
           <Card key={outlet.id} onClick={() => onSelectOutlet(outlet)} className="flex items-center justify-between p-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-emerald-600 font-bold">
@@ -112,8 +195,31 @@ export function OutletListView({ outlets, onSelectOutlet }) {
             </div>
           </Card>
         ))}
-        {filtered.length === 0 && <p className="text-center text-xs text-slate-400 py-8">Tidak ada outlet ditemukan.</p>}
+        {paginated.length === 0 && <p className="text-center text-xs text-slate-400 py-8">Tidak ada outlet ditemukan.</p>}
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between pt-2">
+          <button
+            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+            className="flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 active:scale-95 transition-all"
+          >
+            <ChevronLeft className="w-3.5 h-3.5" /> Sebelumnya
+          </button>
+          <span className="text-xs font-bold text-slate-500">
+            Hal {currentPage} / {totalPages}
+          </span>
+          <button
+            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+            disabled={currentPage === totalPages}
+            className="flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 active:scale-95 transition-all"
+          >
+            Selanjutnya <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       <OHSInfoModal open={showInfo} onClose={() => setShowInfo(false)} />
     </div>
@@ -123,12 +229,49 @@ export function OutletListView({ outlets, onSelectOutlet }) {
 export function OutletDetailView({ outlet, onBack }) {
   const [note, setNote] = useState("");
   const [showInfo, setShowInfo] = useState(false);
+  
+  const trendPositive = (outlet.trend || 0) >= 0;
+  const trendValue = Math.abs(outlet.trend || 0).toFixed(1);
+  
+  // Prepare 3-month history data
+  const history3Mo = [
+    { label: 'Bulan Ini', be: outlet.beMonth || 0, current: true },
+    { label: 'Bulan Lalu', be: (outlet.avgBE || 0) * 3 - (outlet.beMonth || 0) - ((outlet.avgBE || 0) * 3 - (outlet.beMonth || 0) - (outlet.totalBE3Mo || 0)) / 2, be: outlet.totalBE3Mo ? outlet.totalBE3Mo - outlet.beMonth - ((outlet.totalBE3Mo - outlet.beMonth) * (trendPositive ? 1/(1+outlet.trend/100) : 1/(1-outlet.trend/100))) : 0 },
+  ];
+  
+  // Better approach: calculate prev and prev2 from total
+  const total3Mo = outlet.totalBE3Mo || 0;
+  const current = outlet.beMonth || 0;
+  const prevTotal = total3Mo - current;
+  let prev, prev2;
+  
+  if (outlet.trend && outlet.trend !== 0 && prevTotal > 0) {
+    // If trend is MoM from prev to current: current = prev * (1 + trend/100)
+    // So prev = current / (1 + trend/100)
+    const trendFactor = 1 + (outlet.trend / 100);
+    prev = current / trendFactor;
+    prev2 = prevTotal - prev;
+  } else {
+    // Fallback: split evenly
+    prev = prevTotal / 2;
+    prev2 = prevTotal / 2;
+  }
+  
+  const monthlyHistory = [
+    { label: 'Bulan Ini', be: current, current: true },
+    { label: 'Bulan Lalu', be: Math.max(0, prev) },
+    { label: '2 Bulan Lalu', be: Math.max(0, prev2) },
+  ];
+
+  const breakdown = outlet.healthBreakdown || { volume: 0, trend: 0, freq: 0 };
+
   return (
     <div className="space-y-6 pb-24 animate-in slide-in-from-right-4 duration-300">
       <button onClick={onBack} className="flex items-center gap-2 text-slate-500 font-bold text-xs uppercase tracking-wider">
         <ArrowLeft className="w-4 h-4" /> Kembali
       </button>
 
+      {/* Header */}
       <section>
         <div className="flex justify-between items-start">
           <div>
@@ -147,7 +290,71 @@ export function OutletDetailView({ outlet, onBack }) {
 
       <OHSInfoModal open={showInfo} onClose={() => setShowInfo(false)} />
 
-      <div className="grid grid-cols-2 gap-4">
+      {/* OHS Score Card */}
+      <Card className="bg-gradient-to-br from-emerald-50 to-slate-50 dark:from-emerald-950/20 dark:to-slate-900 border-emerald-100 dark:border-emerald-900/30">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <p className="text-[10px] text-slate-500 uppercase font-bold">Outlet Health Score</p>
+            <p className="text-3xl font-black text-emerald-600 mt-1">{outlet.health || 0}</p>
+          </div>
+          <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${
+            outlet.health >= 70 ? 'bg-emerald-100 text-emerald-600' : 
+            outlet.health >= 40 ? 'bg-amber-100 text-amber-600' : 'bg-red-100 text-red-600'
+          }`}>
+            <Activity className="w-7 h-7" />
+          </div>
+        </div>
+        
+        {/* OHS Breakdown Bars */}
+        <div className="space-y-3">
+          <ProgressBar 
+            label="Volume BE (40%)" 
+            value={Math.round(breakdown.volume || 0)} 
+            color="bg-emerald-500" 
+            percentage={40}
+          />
+          <ProgressBar 
+            label="Trend MoM (40%)" 
+            value={Math.round(breakdown.trend || 0)} 
+            color="bg-blue-500" 
+            percentage={40}
+          />
+          <ProgressBar 
+            label="Frekuensi (20%)" 
+            value={Math.round(breakdown.freq || 0)} 
+            color="bg-violet-500" 
+            percentage={20}
+          />
+        </div>
+      </Card>
+
+      {/* Stats Grid */}
+      <div className="grid grid-cols-2 gap-3">
+        <Card className="p-4">
+          <p className="text-[10px] text-slate-400 uppercase font-bold">Total BE 3 Bulan</p>
+          <p className="text-lg font-black text-slate-900 dark:text-white mt-1">{(outlet.totalBE3Mo || 0).toFixed(1)}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-[10px] text-slate-400 uppercase font-bold">Rata-rata BE/Bln</p>
+          <p className="text-lg font-black text-slate-900 dark:text-white mt-1">{(outlet.avgBE || 0).toFixed(1)}</p>
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center gap-1.5 mb-1">
+            <p className="text-[10px] text-slate-400 uppercase font-bold">Trend MoM</p>
+            {trendPositive ? <TrendingUp className="w-3 h-3 text-emerald-500" /> : <TrendingDown className="w-3 h-3 text-red-500" />}
+          </div>
+          <p className={`text-lg font-black mt-1 ${trendPositive ? 'text-emerald-600' : 'text-red-600'}`}>
+            {trendPositive ? '+' : ''}{trendValue}%
+          </p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-[10px] text-slate-400 uppercase font-bold">Frekuensi (3 Bln)</p>
+          <p className="text-lg font-black text-slate-900 dark:text-white mt-1">{outlet.freq3Mo || 0} <span className="text-xs font-medium text-slate-400">transaksi</span></p>
+        </Card>
+      </div>
+
+      {/* Contact & Last Order */}
+      <div className="grid grid-cols-2 gap-3">
         <Card className="bg-slate-50 dark:bg-slate-800/50 border-none p-4">
           <p className="text-[10px] text-slate-400 uppercase font-bold">Contact Person</p>
           <p className="text-sm font-bold mt-1">{outlet.contact || "Bpk. Manager"}</p>
@@ -158,9 +365,34 @@ export function OutletDetailView({ outlet, onBack }) {
         </Card>
       </div>
 
+      {/* 3-Month BE History */}
       <section>
-        <h3 className="font-bold mb-3 flex items-center gap-2">
-          <History className="w-4 h-4 text-emerald-600" /> Riwayat Transaksi
+        <h3 className="font-bold mb-3 flex items-center gap-2 text-sm">
+          <History className="w-4 h-4 text-emerald-600" /> Riwayat BE 3 Bulan
+        </h3>
+        <Card className="p-0 overflow-hidden">
+          <div className="divide-y divide-slate-50 dark:divide-slate-800">
+            {monthlyHistory.map((item, idx) => (
+              <div key={idx} className="flex items-center justify-between p-4">
+                <div className="flex items-center gap-3">
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${
+                    item.current ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-500'
+                  }`}>
+                    {item.label.charAt(0)}
+                  </div>
+                  <span className="text-sm font-medium">{item.label}</span>
+                </div>
+                <span className="text-sm font-bold">{item.be.toFixed(1)} BE</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </section>
+
+      {/* Transaction History */}
+      <section>
+        <h3 className="font-bold mb-3 flex items-center gap-2 text-sm">
+          <Calendar className="w-4 h-4 text-emerald-600" /> Riwayat Transaksi
         </h3>
         <Card className="p-0 overflow-hidden">
           {(outlet.history || []).length === 0 && <p className="p-4 text-center text-xs text-slate-400">Tidak ada riwayat transaksi 30 hari terakhir</p>}
@@ -176,8 +408,9 @@ export function OutletDetailView({ outlet, onBack }) {
         </Card>
       </section>
 
+      {/* Visit Log */}
       <section>
-        <h3 className="font-bold mb-3 flex items-center gap-2">
+        <h3 className="font-bold mb-3 flex items-center gap-2 text-sm">
           <MessageSquare className="w-4 h-4 text-emerald-600" /> Log Kunjungan
         </h3>
         <Card>

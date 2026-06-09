@@ -88,6 +88,7 @@ export default function AdminDashboard() {
   const [showVacant, setShowVacant] = useState(false);
   const [previewData, setPreviewData] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [uploadLoading, setUploadLoading] = useState(false);
   const [uploadFile, setUploadFile] = useState(null);
 
   const token = localStorage.getItem('token');
@@ -174,12 +175,16 @@ export default function AdminDashboard() {
 
   const handleUpload = async () => {
     if (!uploadFile) { setMessage('❌ Please select a file first'); return; }
+    if (uploadLoading) return;
+    setUploadLoading(true);
+    setMessage('');
     const fd = new FormData(); fd.append('file', uploadFile);
     try {
       const res = await fetch('/.netlify/functions/api', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: fd });
       if (!res.ok) throw new Error(res.status);
       const d = await res.json(); setMessage(`✅ Uploaded ${d.inserted} records.`); await fetchTable('records'); setPreviewData(null); setUploadFile(null);
     } catch(e) { setMessage('❌ Upload failed'); }
+    finally { setUploadLoading(false); }
   };
 
   const downloadCsvTemplate = () => {
@@ -263,13 +268,21 @@ export default function AdminDashboard() {
           <div className="space-y-6">
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6 space-y-4">
               <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-end flex-wrap">
-                <input type="file" accept=".csv,.xlsx,.xls" onChange={handleFileSelect} className="block w-full sm:w-auto text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100" />
+                <input type="file" accept=".csv,.xlsx,.xls" onChange={handleFileSelect} disabled={uploadLoading || previewLoading} className="block w-full sm:w-auto text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 disabled:opacity-50 disabled:cursor-not-allowed" />
                 <div className="flex gap-2 flex-wrap">
                   <button onClick={handlePreview} disabled={!uploadFile || previewLoading} className="px-4 py-2 bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-400 rounded-lg text-sm font-semibold hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed">
                     {previewLoading ? 'Previewing...' : 'Preview'}
                   </button>
-                  <button onClick={handleUpload} disabled={!uploadFile || (previewData && previewData.invalid > 0)} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed">
-                    Import
+                  <button onClick={handleUpload} disabled={!uploadFile || uploadLoading || (previewData && previewData.invalid > 0)} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                    {uploadLoading ? (
+                      <>
+                        <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Importing...
+                      </>
+                    ) : 'Import'}
                   </button>
                 </div>
               </div>

@@ -165,6 +165,7 @@ const parseAyotamaRows = (rows, allOutlets, allUsers) => {
       preview.push({
         row: rowIdx + 1,
         outletName: currentOutletMatch ? currentOutletMatch.name : (currentOutlet || '-'),
+        branchArea: currentBranch || '',
         salesName: salesUser.name,
         date: dc.date,
         volume: totalVolumeBE,
@@ -182,6 +183,53 @@ const parseAyotamaRows = (rows, allOutlets, allUsers) => {
     valid: preview.filter(p => p.valid).length,
     invalid: preview.filter(p => !p.valid).length,
     rows: preview
+  };
+};
+
+// --- OHS (Outlet Health Score) Helpers ---
+const getPreviousMonthRange = (month, year, monthsAgo) => {
+  let targetMonth = month - monthsAgo;
+  let targetYear = year;
+  while (targetMonth <= 0) {
+    targetMonth += 12;
+    targetYear -= 1;
+  }
+  const start = `${targetYear}-${String(targetMonth).padStart(2, '0')}-01`;
+  const lastDay = String(new Date(targetYear, targetMonth, 0).getDate()).padStart(2, '0');
+  const end = `${targetYear}-${String(targetMonth).padStart(2, '0')}-${lastDay}`;
+  return { month: targetMonth, year: targetYear, start, end };
+};
+
+const calculateOHS = (beCurrent, bePrev, bePrev2, freq3Mo) => {
+  const totalBE = (beCurrent || 0) + (bePrev || 0) + (bePrev2 || 0);
+  const avgBE = totalBE / 3;
+  
+  // Trend: month-over-month change
+  const trend = bePrev > 0 ? ((beCurrent - bePrev) / bePrev) * 100 : (beCurrent > 0 ? 100 : 0);
+  
+  // Volume Score (0-100): based on total BE over 3 months, max at 100 BE
+  const volumeScore = Math.min(totalBE, 100);
+  
+  // Trend Score (0-100): neutral at 0% trend = 50, +100% = 100, -100% = 0
+  const trendScore = Math.max(0, Math.min(100, 50 + (trend / 2)));
+  
+  // Frequency Score (0-100): 20 transactions = 100 points
+  const freqScore = Math.min((freq3Mo || 0) * 5, 100);
+  
+  // Weighted combination
+  const ohs = Math.round((volumeScore * 0.40) + (trendScore * 0.40) + (freqScore * 0.20));
+  
+  return {
+    score: Math.max(0, Math.min(100, ohs)),
+    totalBE,
+    avgBE,
+    trend,
+    freq3Mo: freq3Mo || 0,
+    breakdown: {
+      volume: Math.round(volumeScore),
+      trend: Math.round(trendScore),
+      frequency: Math.round(freqScore)
+    }
   };
 };
 
@@ -484,14 +532,22 @@ const getUserDashboardData = async (userId) => {
     };
   });
 
-  // Outlets data
+  // Outlets data with historical BE for OHS calculation
+  const { start: prevStart, end: prevEnd } = getPreviousMonthRange(month, year, 1);
+  const { start: prev2Start, end: prev2End } = getPreviousMonthRange(month, year, 2);
+  const historyStart = prev2Start;
+
   const outletRows = await sql`
-    SELECT o.id, o.name, o.type, o.address, o.contact_person, o.branch_area,
-           COALESCE(SUM(CASE WHEN sr.record_date >= ${start} THEN sr.volume_be ELSE 0 END), 0) as beMonth,
-           MAX(sr.record_date) as last_order
+    SELECT 
+      o.id, o.name, o.type, o.address, o.contact_person, o.branch_area,
+      COALESCE(SUM(CASE WHEN sr.record_date >= ${start} AND sr.record_date <= ${end} THEN sr.volume_be ELSE 0 END), 0) as be_current,
+      COALESCE(SUM(CASE WHEN sr.record_date >= ${prevStart} AND sr.record_date <= ${prevEnd} THEN sr.volume_be ELSE 0 END), 0) as be_prev,
+      COALESCE(SUM(CASE WHEN sr.record_date >= ${prev2Start} AND sr.record_date <= ${prev2End} THEN sr.volume_be ELSE 0 END), 0) as be_prev2,
+      COALESCE(SUM(CASE WHEN sr.record_date >= ${historyStart} AND sr.record_date <= ${end} THEN 1 ELSE 0 END), 0) as freq_3mo,
+      MAX(sr.record_date) as last_order
     FROM outlets o
     LEFT JOIN outlet_assignments oa ON oa.outlet_id = o.id AND oa.salesman_id = ${userId} AND oa.unassigned_at IS NULL
-    LEFT JOIN sales_records sr ON sr.outlet_id = o.id
+    LEFT JOIN sales_records sr ON sr.outlet_id = o.id AND sr.sales_id = ${userId}
     WHERE oa.id IS NOT NULL
     GROUP BY o.id, o.name, o.type, o.address, o.contact_person, o.branch_area
   `;
@@ -519,12 +575,24 @@ const getUserDashboardData = async (userId) => {
       total: totalBonus
     },
     outlets: outletRows.map(o => {
+      const ohsData = calculateOHS(
+        parseFloat(o.be_current || 0),
+        parseFloat(o.be_prev || 0),
+        parseFloat(o.be_prev2 || 0),
+        parseInt(o.freq_3mo || 0)
+      );
       const daysSince = o.last_order ? Math.floor((Date.now() - new Date(o.last_order)) / 86400000) : 99;
       return {
         id: o.id, name: o.name, type: o.type, address: o.address, contact: o.contact_person, branchArea: o.branch_area || '',
-        beMonth: parseFloat(o.bemonth), health: Math.max(0, 100 - daysSince * 2),
+        beMonth: parseFloat(o.be_current || 0),
+        health: ohsData.score,
+        healthBreakdown: ohsData.breakdown,
+        totalBE3Mo: ohsData.totalBE,
+        avgBE: ohsData.avgBE,
+        trend: ohsData.trend,
+        freq3Mo: ohsData.freq3Mo,
         lastOrder: daysSince === 0 ? 'Today' : `${daysSince} days ago`,
-        alert: daysSince > 7 ? 'Risk of Churn' : null
+        alert: ohsData.score < 40 ? 'Unhealthy Outlet' : ohsData.score < 70 ? 'Needs Attention' : null
       };
     }),
     skuPerformance,
@@ -613,11 +681,19 @@ const getSupervisorDashboardData = async (supervisorId) => {
     )
   `;
 
+  const { start: prevStart, end: prevEnd } = getPreviousMonthRange(month, year, 1);
+  const { start: prev2Start, end: prev2End } = getPreviousMonthRange(month, year, 2);
+  const historyStart = prev2Start;
+
   const outletRows = await sql`
-    SELECT o.id, o.name, o.type, o.address, o.contact_person, o.branch_area,
-           u.name as salesman_name,
-           COALESCE(SUM(CASE WHEN sr.record_date >= ${start} THEN sr.volume_be ELSE 0 END), 0) as beMonth,
-           MAX(sr.record_date) as last_order
+    SELECT 
+      o.id, o.name, o.type, o.address, o.contact_person, o.branch_area,
+      u.name as salesman_name,
+      COALESCE(SUM(CASE WHEN sr.record_date >= ${start} AND sr.record_date <= ${end} THEN sr.volume_be ELSE 0 END), 0) as be_current,
+      COALESCE(SUM(CASE WHEN sr.record_date >= ${prevStart} AND sr.record_date <= ${prevEnd} THEN sr.volume_be ELSE 0 END), 0) as be_prev,
+      COALESCE(SUM(CASE WHEN sr.record_date >= ${prev2Start} AND sr.record_date <= ${prev2End} THEN sr.volume_be ELSE 0 END), 0) as be_prev2,
+      COALESCE(SUM(CASE WHEN sr.record_date >= ${historyStart} AND sr.record_date <= ${end} THEN 1 ELSE 0 END), 0) as freq_3mo,
+      MAX(sr.record_date) as last_order
     FROM outlets o
     LEFT JOIN outlet_assignments oa ON oa.outlet_id = o.id AND oa.unassigned_at IS NULL
     LEFT JOIN users u ON oa.salesman_id = u.id
@@ -634,12 +710,25 @@ const getSupervisorDashboardData = async (supervisorId) => {
       vacantOutlets: parseInt(vacantCount[0].cnt)
     },
     outlets: outletRows.map(o => {
+      const ohsData = calculateOHS(
+        parseFloat(o.be_current || 0),
+        parseFloat(o.be_prev || 0),
+        parseFloat(o.be_prev2 || 0),
+        parseInt(o.freq_3mo || 0)
+      );
       const daysSince = o.last_order ? Math.floor((Date.now() - new Date(o.last_order)) / 86400000) : 99;
       return {
         id: o.id, name: o.name, type: o.type, address: o.address, contact: o.contact_person, branchArea: o.branch_area || '',
-        beMonth: parseFloat(o.bemonth), health: Math.max(0, 100 - daysSince * 2),
+        salesman: o.salesman_name || 'Vacant',
+        beMonth: parseFloat(o.be_current || 0),
+        health: ohsData.score,
+        healthBreakdown: ohsData.breakdown,
+        totalBE3Mo: ohsData.totalBE,
+        avgBE: ohsData.avgBE,
+        trend: ohsData.trend,
+        freq3Mo: ohsData.freq3Mo,
         lastOrder: daysSince === 0 ? 'Today' : `${daysSince} days ago`,
-        alert: daysSince > 7 ? 'Risk of Churn' : null
+        alert: ohsData.score < 40 ? 'Unhealthy Outlet' : ohsData.score < 70 ? 'Needs Attention' : null
       };
     })
   };
@@ -932,19 +1021,22 @@ const _handler = async (event, context) => {
                     const preview = parseAyotamaRows(rawRows, allOutlets, allUsers);
                     const validRows = preview.rows.filter(r => r.valid);
 
-                    // Group new outlets
-                    const newOutletNames = new Set();
+                    // Group new outlets with their branch areas
+                    const newOutletMap = {};
                     for (const r of validRows) {
                       if (r.isNewOutlet && r.outletName && r.outletName !== '-') {
-                        newOutletNames.add(r.outletName);
+                        // Keep the first (or most common) branch area for this outlet
+                        if (!newOutletMap[r.outletName]) {
+                          newOutletMap[r.outletName] = r.branchArea || '';
+                        }
                       }
                     }
 
-                    // Create missing outlets
-                    for (const name of newOutletNames) {
+                    // Create missing outlets with branch area
+                    for (const [name, branchArea] of Object.entries(newOutletMap)) {
                       await sql`
                         INSERT INTO outlets (id, name, type, address, contact_person, branch_area)
-                        VALUES (${randomUUID()}, ${name}, '', '', '', '')
+                        VALUES (${randomUUID()}, ${name}, '', '', '', ${branchArea})
                         ON CONFLICT DO NOTHING
                       `;
                     }
@@ -994,7 +1086,7 @@ const _handler = async (event, context) => {
                         insertedCount += ids.length;
                       }
                     }
-                    resolve({ statusCode: 200, body: JSON.stringify({ success: true, inserted: insertedCount, totalPreviewed: preview.rows.length, newOutletsCreated: newOutletNames.size }) });
+                    resolve({ statusCode: 200, body: JSON.stringify({ success: true, inserted: insertedCount, totalPreviewed: preview.rows.length, newOutletsCreated: Object.keys(newOutletMap).length }) });
                   }
                 } else {
                   resolve({ statusCode: 400, body: JSON.stringify({ error: 'Unsupported file format. Please upload Ayotama rincian faktur format (xlsx/xls).' }) });
