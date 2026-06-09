@@ -685,6 +685,167 @@ const getSupervisorDashboardData = async (supervisorId) => {
   const { start: prev2Start, end: prev2End } = getPreviousMonthRange(month, year, 2);
   const historyStart = prev2Start;
 
+  // --- Supervisor/Admin SKU Performance (region-aggregated) ---
+  const prevMonthNum = month === 1 ? 12 : month - 1;
+  const prevMonthYear = month === 1 ? year - 1 : year;
+  const prevMonthStart = `${prevMonthYear}-${String(prevMonthNum).padStart(2, '0')}-01`;
+  const prevMonthEnd = `${prevMonthYear}-${String(prevMonthNum).padStart(2, '0')}-${String(new Date(prevMonthYear, prevMonthNum, 0).getDate()).padStart(2, '0')}`;
+  const lastYearStart = `${year - 1}-${String(month).padStart(2, '0')}-01`;
+  const lastYearEnd = `${year - 1}-${String(month).padStart(2, '0')}-${String(new Date(year - 1, month, 0).getDate()).padStart(2, '0')}`;
+
+  const supSkuCurrent = await sql`
+    SELECT 
+      sr.sku_name,
+      SUM(sr.volume_be) as volume,
+      COUNT(*) as transaction_count,
+      AVG(sr.volume_be) as avg_order
+    FROM sales_records sr
+    LEFT JOIN users u ON sr.sales_id = u.id
+    WHERE sr.record_date >= ${start} AND sr.record_date <= ${end}
+      AND sr.sku_name IS NOT NULL AND sr.sku_name <> ''
+      AND (${region} = '' OR u.region = ${region})
+    GROUP BY sr.sku_name ORDER BY volume DESC LIMIT 10
+  `;
+
+  const supSkuPrevMonth = await sql`
+    SELECT sr.sku_name, SUM(sr.volume_be) as volume, COUNT(*) as transaction_count
+    FROM sales_records sr
+    LEFT JOIN users u ON sr.sales_id = u.id
+    WHERE sr.record_date >= ${prevMonthStart} AND sr.record_date <= ${prevMonthEnd}
+      AND sr.sku_name IS NOT NULL AND sr.sku_name <> ''
+      AND (${region} = '' OR u.region = ${region})
+    GROUP BY sr.sku_name
+  `;
+
+  const supSkuLastYear = await sql`
+    SELECT sr.sku_name, SUM(sr.volume_be) as volume
+    FROM sales_records sr
+    LEFT JOIN users u ON sr.sales_id = u.id
+    WHERE sr.record_date >= ${lastYearStart} AND sr.record_date <= ${lastYearEnd}
+      AND sr.sku_name IS NOT NULL AND sr.sku_name <> ''
+      AND (${region} = '' OR u.region = ${region})
+    GROUP BY sr.sku_name
+  `;
+
+  const supSkuTopOutlets = await sql`
+    SELECT DISTINCT ON (sr.sku_name)
+      sr.sku_name,
+      o.name as outlet_name,
+      SUM(sr.volume_be) as outlet_volume
+    FROM sales_records sr
+    LEFT JOIN outlets o ON o.id = sr.outlet_id
+    LEFT JOIN users u ON sr.sales_id = u.id
+    WHERE sr.record_date >= ${start} AND sr.record_date <= ${end}
+      AND sr.sku_name IS NOT NULL AND sr.sku_name <> ''
+      AND (${region} = '' OR u.region = ${region})
+    GROUP BY sr.sku_name, o.name
+    ORDER BY sr.sku_name, outlet_volume DESC
+  `;
+
+  const supSkuWeekly = await sql`
+    SELECT 
+      sr.sku_name,
+      EXTRACT(WEEK FROM sr.record_date) as week_num,
+      SUM(sr.volume_be) as weekly_volume
+    FROM sales_records sr
+    LEFT JOIN users u ON sr.sales_id = u.id
+    WHERE sr.record_date >= ${start} AND sr.record_date <= ${end}
+      AND sr.sku_name IS NOT NULL AND sr.sku_name <> ''
+      AND (${region} = '' OR u.region = ${region})
+    GROUP BY sr.sku_name, EXTRACT(WEEK FROM sr.record_date)
+    ORDER BY sr.sku_name, week_num
+  `;
+
+  const supSkuTransactions = await sql`
+    SELECT 
+      sr.sku_name,
+      sr.record_date::text as date,
+      sr.volume_be as be,
+      o.name as outlet_name
+    FROM sales_records sr
+    LEFT JOIN outlets o ON o.id = sr.outlet_id
+    LEFT JOIN users u ON sr.sales_id = u.id
+    WHERE sr.record_date >= ${start} AND sr.record_date <= ${end}
+      AND sr.sku_name IS NOT NULL AND sr.sku_name <> ''
+      AND (${region} = '' OR u.region = ${region})
+    ORDER BY sr.sku_name, sr.record_date DESC
+  `;
+
+  const supSkuPrevTransactions = await sql`
+    SELECT 
+      sr.sku_name,
+      sr.record_date::text as date,
+      sr.volume_be as be,
+      o.name as outlet_name
+    FROM sales_records sr
+    LEFT JOIN outlets o ON o.id = sr.outlet_id
+    LEFT JOIN users u ON sr.sales_id = u.id
+    WHERE sr.record_date >= ${prevMonthStart} AND sr.record_date <= ${prevMonthEnd}
+      AND sr.sku_name IS NOT NULL AND sr.sku_name <> ''
+      AND (${region} = '' OR u.region = ${region})
+    ORDER BY sr.sku_name, sr.record_date DESC
+  `;
+
+  const supPrevMonthMap = Object.fromEntries(supSkuPrevMonth.map(r => [
+    r.sku_name,
+    { volume: parseFloat(r.volume || 0), transactionCount: parseInt(r.transaction_count || 0) }
+  ]));
+  const supLastYearMap = Object.fromEntries(supSkuLastYear.map(r => [r.sku_name, parseFloat(r.volume || 0)]));
+  const supTopOutletMap = Object.fromEntries(supSkuTopOutlets.map(r => [r.sku_name, { name: r.outlet_name, volume: parseFloat(r.outlet_volume || 0) }]));
+
+  const supWeeklyMap = {};
+  for (const row of supSkuWeekly) {
+    if (!supWeeklyMap[row.sku_name]) supWeeklyMap[row.sku_name] = [];
+    supWeeklyMap[row.sku_name].push(parseFloat(row.weekly_volume || 0));
+  }
+
+  const supTransactionsMap = {};
+  for (const row of supSkuTransactions) {
+    if (!supTransactionsMap[row.sku_name]) supTransactionsMap[row.sku_name] = [];
+    supTransactionsMap[row.sku_name].push({ date: row.date, be: parseFloat(row.be || 0), outlet: row.outlet_name || '-' });
+  }
+
+  const supPrevTransactionsMap = {};
+  for (const row of supSkuPrevTransactions) {
+    if (!supPrevTransactionsMap[row.sku_name]) supPrevTransactionsMap[row.sku_name] = [];
+    supPrevTransactionsMap[row.sku_name].push({ date: row.date, be: parseFloat(row.be || 0), outlet: row.outlet_name || '-' });
+  }
+
+  const supTotalSkuVolume = supSkuCurrent.reduce((sum, r) => sum + parseFloat(r.volume || 0), 0);
+
+  const supSkuPerformance = supSkuCurrent.map(r => {
+    const volume = parseFloat(r.volume || 0);
+    const prevData = supPrevMonthMap[r.sku_name] || { volume: 0, transactionCount: 0 };
+    const prev = prevData.volume;
+    const lastY = supLastYearMap[r.sku_name] || 0;
+    const momTrend = prev > 0 ? ((volume - prev) / prev) * 100 : (volume > 0 ? 100 : 0);
+    const yoyTrend = lastY > 0 ? ((volume - lastY) / lastY) * 100 : (volume > 0 ? 100 : 0);
+    const topOutletData = supTopOutletMap[r.sku_name] || { name: '-', volume: 0 };
+    const weekly = supWeeklyMap[r.sku_name] || [];
+    while (weekly.length < 4) weekly.unshift(0);
+    const monthlyHistory = weekly.slice(-4);
+    const topOutletContrib = volume > 0 ? Math.round((topOutletData.volume / volume) * 100) : 0;
+
+    return {
+      name: r.sku_name,
+      volume,
+      transactionCount: parseInt(r.transaction_count || 0),
+      avgOrder: parseFloat(r.avg_order || 0),
+      topOutlet: topOutletData.name,
+      topOutletVolume: topOutletData.volume,
+      topOutletContrib,
+      mixPercent: supTotalSkuVolume > 0 ? (volume / supTotalSkuVolume) * 100 : 0,
+      momTrend,
+      yoyTrend,
+      prevVolume: prev,
+      prevTransactionCount: prevData.transactionCount,
+      monthlyHistory,
+      transactions: supTransactionsMap[r.sku_name] || [],
+      prevTransactions: supPrevTransactionsMap[r.sku_name] || []
+    };
+  });
+  // --- end SKU performance ---
+
   const outletRows = await sql`
     SELECT 
       o.id, o.name, o.type, o.address, o.contact_person, o.branch_area,
@@ -709,6 +870,7 @@ const getSupervisorDashboardData = async (supervisorId) => {
       teamAttainment: totalTarget > 0 ? Math.round((totalTeamBE / totalTarget) * 100) : 0,
       vacantOutlets: parseInt(vacantCount[0].cnt)
     },
+    skuPerformance: supSkuPerformance,
     outlets: outletRows.map(o => {
       const ohsData = calculateOHS(
         parseFloat(o.be_current || 0),

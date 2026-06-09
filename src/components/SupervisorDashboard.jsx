@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Users, AlertTriangle, Target, Award, Store, ChevronRight, ArrowLeft, CheckCircle, X } from 'lucide-react';
+import { SkuAnalysisSection } from './SalesDashboard';
 
 const formatRp = (n) => 'Rp ' + (Number(n) || 0).toLocaleString('id-ID');
 
@@ -110,6 +111,11 @@ export default function SupervisorDashboard({ data, onNavigate }) {
           <h3 className="font-bold text-slate-900 dark:text-white">Set Target & Bonus</h3>
           <TargetConfigForm users={users} onSave={handleSaveTarget} />
         </Card>
+      )}
+
+      {/* Product Analysis */}
+      {data?.skuPerformance && data.skuPerformance.length > 0 && (
+        <SkuAnalysisSection skuPerformance={data.skuPerformance} />
       )}
 
       {/* Decline Alerts */}

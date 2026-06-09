@@ -176,7 +176,7 @@ export default function SalesDashboard({ data, onVisitClick }) {
 }
 
 // --- SKU Analysis Sub-component ---
-function SkuDetailModal({ sku, onClose }) {
+export function SkuDetailModal({ sku, onClose }) {
   if (!sku) return null;
   const monthlyHistory = sku.monthlyHistory || [sku.volume * 0.8, sku.volume * 0.9, sku.volume * 0.95, sku.volume];
   const maxHistory = Math.max(...monthlyHistory, 1);
@@ -328,7 +328,7 @@ function SkuDetailModal({ sku, onClose }) {
   );
 }
 
-function SkuAnalysisSection({ skuPerformance }) {
+export function SkuAnalysisSection({ skuPerformance }) {
   const [showInfo, setShowInfo] = useState(false);
   const [expandedIdx, setExpandedIdx] = useState(null);
   const [selectedSku, setSelectedSku] = useState(null);
