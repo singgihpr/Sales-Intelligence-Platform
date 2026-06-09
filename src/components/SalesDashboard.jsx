@@ -32,8 +32,6 @@ const Card = ({ children, className = "", onClick }) => (
 
 export default function SalesDashboard({ data, onVisitClick }) {
   const { user, dashboardStats, bonusSummary, outlets, skuPerformance, daysElapsed, daysInMonth } = data || {};
-  const [isSimulating, setIsSimulating] = useState(false);
-  const [simulatedBE, setSimulatedBE] = useState(dashboardStats?.currentBE || 0);
 
   if (!dashboardStats) return <div className="text-center text-slate-400 py-20">Loading dashboard...</div>;
 
@@ -51,32 +49,6 @@ export default function SalesDashboard({ data, onVisitClick }) {
   const shortfallPerDay = daysLeft > 0
     ? (shortfall / daysLeft).toFixed(1)
     : 0;
-
-  const simAttainment = dashboardStats.monthlyTargetBE > 0
-    ? (simulatedBE / dashboardStats.monthlyTargetBE) * 100
-    : 0;
-
-  // Projected total bonus for simulator
-  const simPercentageBonus = (() => {
-    const cfg = dashboardStats.percentageConfig;
-    if (!cfg || !cfg.tiers) return 0;
-    let activeTier = null;
-    for (const tier of cfg.tiers) {
-      if (simAttainment >= tier.threshold) activeTier = tier;
-    }
-    return activeTier ? activeTier.reward : 0;
-  })();
-  const simVolumeBonus = (() => {
-    const cfg = dashboardStats.volumeConfig;
-    if (!cfg || !cfg.tiers) return 0;
-    let activeTier = null;
-    for (const tier of cfg.tiers) {
-      if (simulatedBE >= tier.threshold) activeTier = tier;
-    }
-    return activeTier ? activeTier.reward : 0;
-  })();
-  const simTotal = simPercentageBonus + simVolumeBonus + (bonusSummary?.activeOutlets?.bonus || 0);
-  const currentTotal = bonusSummary?.total || 0;
 
   return (
     <div className="space-y-6 mb-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -122,49 +94,6 @@ export default function SalesDashboard({ data, onVisitClick }) {
 
       {/* Total Bonus Summary */}
       <BonusSummaryCard bonusSummary={bonusSummary} />
-
-      {/* What-If Master Simulator */}
-      <section>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-bold text-slate-900 dark:text-white">Simulasi Bonus "What-If"</h3>
-          <button
-            onClick={() => setIsSimulating(!isSimulating)}
-            className="px-3 py-1.5 bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-400 rounded-lg text-xs font-bold hover:bg-blue-100 dark:hover:bg-blue-900/50 active:scale-95 transition-all border border-blue-200 dark:border-blue-800"
-          >
-            {isSimulating ? 'Tutup Simulasi' : 'Buka Simulasi'}
-          </button>
-        </div>
-        {isSimulating && (
-          <Card className="space-y-4">
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Proyeksi BE Akhir Bulan</label>
-                <div className="flex items-center gap-2">
-                  <input type="number" min="0" value={simulatedBE} onChange={e => setSimulatedBE(Math.max(0, Number(e.target.value)))} className="w-24 text-right text-sm font-bold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 focus:ring-2 focus:ring-emerald-500 outline-none transition-shadow" />
-                  <span className="text-xs text-slate-400 font-medium">BE</span>
-                </div>
-              </div>
-              <input type="range" min="0" max={Math.round(dashboardStats.monthlyTargetBE * 1.3)} step="1" value={simulatedBE} onChange={e => setSimulatedBE(Number(e.target.value))} className="w-full accent-emerald-600" />
-              <div className="flex justify-between text-[10px] text-slate-400 mt-1 font-medium"><span>0 BE</span><span>{Math.round(dashboardStats.monthlyTargetBE * 1.3)} BE</span></div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 text-center">
-                <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">Attainment</p>
-                <p className={`text-lg font-bold ${simAttainment >= 100 ? 'text-emerald-500' : 'text-slate-900 dark:text-white'}`}>{Math.round(simAttainment)}%</p>
-              </div>
-              <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 text-center">
-                <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">Est. Total Bonus</p>
-                <p className="text-lg font-bold text-emerald-600">{`Rp ${(simTotal/1000000).toFixed(1)}jt`}</p>
-              </div>
-            </div>
-            {simTotal !== currentTotal && (
-              <div className={`text-xs font-bold text-center py-2.5 rounded-lg ${simTotal > currentTotal ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400' : 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400'}`}>
-                {simTotal > currentTotal ? `+Rp ${((simTotal - currentTotal)/1000000).toFixed(1)}jt vs realitas saat ini` : `-Rp ${((currentTotal - simTotal)/1000000).toFixed(1)}jt vs realitas saat ini`}
-              </div>
-            )}
-          </Card>
-        )}
-      </section>
 
       {/* Detailed Bonus Cards */}
       <section className="space-y-4">

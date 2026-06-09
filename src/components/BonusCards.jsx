@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Target, TrendingUp, Store, CheckCircle, Award } from 'lucide-react';
+import { Target, TrendingUp, Store, CheckCircle, Award, ChevronDown, ChevronUp, Calculator } from 'lucide-react';
 
 const formatRp = (n) => 'Rp ' + (Number(n) || 0).toLocaleString('id-ID');
 
@@ -53,6 +53,7 @@ export const BonusSummaryCard = ({ bonusSummary }) => {
 };
 
 export const PercentageBonusCard = ({ currentBE, targetBE, config, result }) => {
+  const [isSimulating, setIsSimulating] = useState(false);
   const [simulatedBE, setSimulatedBE] = useState(currentBE);
   if (!config || !config.tiers) return null;
 
@@ -95,23 +96,75 @@ export const PercentageBonusCard = ({ currentBE, targetBE, config, result }) => 
         <span className="text-xs text-slate-500">Current:</span>
         <span className="text-sm font-bold text-emerald-600">{formatRp(currentTier ? currentTier.reward : 0)}</span>
       </div>
-      {/* Mini simulator inside card */}
-      <div className="pt-2 border-t border-slate-50 dark:border-slate-800 space-y-2">
-        <label className="text-xs font-bold text-slate-500 uppercase">Simulate BE</label>
-        <input type="range" min="0" max={Math.round(targetBE * 1.3)} step="1" value={simulatedBE} onChange={e => setSimulatedBE(Number(e.target.value))} className="w-full accent-emerald-600" />
-        <div className="flex justify-between text-[10px] text-slate-400 font-medium">
-          <span>0</span><span>{Math.round(targetBE * 1.3)} BE</span>
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-slate-500">Projected:</span>
-          <span className="text-sm font-bold text-blue-600">{formatRp(simTier ? simTier.reward : 0)} ({Math.round(simAttainment)}%)</span>
-        </div>
+      
+      {/* Simulator Toggle */}
+      <div className="pt-2 border-t border-slate-50 dark:border-slate-800">
+        <button 
+          onClick={() => setIsSimulating(!isSimulating)}
+          className="w-full flex items-center justify-center gap-2 py-2 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 rounded-lg text-xs font-bold hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors"
+        >
+          <Calculator className="w-3.5 h-3.5" />
+          {isSimulating ? 'Tutup Simulasi' : 'Buka Simulasi'}
+          {isSimulating ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+        </button>
+        
+        {isSimulating && (
+          <div className="mt-3 space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-500 uppercase">Proyeksi BE</label>
+                <div className="flex items-center gap-2">
+                  <input 
+                    type="number" 
+                    min="0" 
+                    value={simulatedBE} 
+                    onChange={e => setSimulatedBE(Math.max(0, Number(e.target.value)))} 
+                    className="w-20 text-right text-sm font-bold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 focus:ring-2 focus:ring-emerald-500 outline-none transition-shadow"
+                  />
+                  <span className="text-xs text-slate-400 font-medium">BE</span>
+                </div>
+              </div>
+              <input 
+                type="range" 
+                min="0" 
+                max={Math.round(targetBE * 1.3)} 
+                step="1" 
+                value={simulatedBE} 
+                onChange={e => setSimulatedBE(Number(e.target.value))} 
+                className="w-full accent-emerald-600" 
+              />
+              <div className="flex justify-between text-[10px] text-slate-400 font-medium">
+                <span>0</span><span>{Math.round(targetBE * 1.3)} BE</span>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 text-center">
+                <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">Attainment</p>
+                <p className={`text-lg font-bold ${simAttainment >= 100 ? 'text-emerald-500' : 'text-slate-900 dark:text-white'}`}>{Math.round(simAttainment)}%</p>
+              </div>
+              <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 text-center">
+                <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">Est. Bonus</p>
+                <p className="text-lg font-bold text-emerald-600">{formatRp(simTier ? simTier.reward : 0)}</p>
+              </div>
+            </div>
+            {simTier && currentTier && simTier.reward !== currentTier.reward && (
+              <div className={`text-xs font-bold text-center py-2.5 rounded-lg ${simTier.reward > currentTier.reward ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400' : 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400'}`}>
+                {simTier.reward > currentTier.reward 
+                  ? `+${formatRp(simTier.reward - currentTier.reward)} vs realitas saat ini` 
+                  : `${formatRp(simTier.reward - currentTier.reward)} vs realitas saat ini`
+                }
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
 };
 
 export const VolumeBonusCard = ({ currentBE, config, result }) => {
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [simulatedBE, setSimulatedBE] = useState(currentBE);
   if (!config || !config.tiers) return null;
   const maxTier = config.tiers[config.tiers.length - 1];
   const maxThreshold = maxTier?.threshold || 3500;
@@ -125,6 +178,7 @@ export const VolumeBonusCard = ({ currentBE, config, result }) => {
   };
 
   const currentTier = getTier(currentBE);
+  const simTier = getTier(simulatedBE);
 
   return (
     <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-5 space-y-4">
@@ -145,13 +199,72 @@ export const VolumeBonusCard = ({ currentBE, config, result }) => {
         <span className="text-xs text-slate-500">Current Reward:</span>
         <span className="text-sm font-bold text-blue-600">{formatRp(currentTier ? currentTier.reward : 0)}</span>
       </div>
+
+      {/* Simulator Toggle */}
+      <div className="pt-2 border-t border-slate-50 dark:border-slate-800">
+        <button 
+          onClick={() => setIsSimulating(!isSimulating)}
+          className="w-full flex items-center justify-center gap-2 py-2 bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 rounded-lg text-xs font-bold hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
+        >
+          <Calculator className="w-3.5 h-3.5" />
+          {isSimulating ? 'Tutup Simulasi' : 'Buka Simulasi'}
+          {isSimulating ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+        </button>
+        
+        {isSimulating && (
+          <div className="mt-3 space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-500 uppercase">Proyeksi BE</label>
+                <div className="flex items-center gap-2">
+                  <input 
+                    type="number" 
+                    min="0" 
+                    value={simulatedBE} 
+                    onChange={e => setSimulatedBE(Math.max(0, Number(e.target.value)))} 
+                    className="w-20 text-right text-sm font-bold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 focus:ring-2 focus:ring-blue-500 outline-none transition-shadow"
+                  />
+                  <span className="text-xs text-slate-400 font-medium">BE</span>
+                </div>
+              </div>
+              <input 
+                type="range" 
+                min="0" 
+                max={Math.round(maxThreshold * 1.3)} 
+                step="1" 
+                value={simulatedBE} 
+                onChange={e => setSimulatedBE(Number(e.target.value))} 
+                className="w-full accent-blue-600" 
+              />
+              <div className="flex justify-between text-[10px] text-slate-400 font-medium">
+                <span>0</span><span>{Math.round(maxThreshold * 1.3)} BE</span>
+              </div>
+            </div>
+            <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 text-center">
+              <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">Est. Bonus</p>
+              <p className="text-lg font-bold text-blue-600">{formatRp(simTier ? simTier.reward : 0)}</p>
+            </div>
+            {simTier && currentTier && simTier.reward !== currentTier.reward && (
+              <div className={`text-xs font-bold text-center py-2.5 rounded-lg ${simTier.reward > currentTier.reward ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400' : 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400'}`}>
+                {simTier.reward > currentTier.reward 
+                  ? `+${formatRp(simTier.reward - currentTier.reward)} vs realitas saat ini` 
+                  : `${formatRp(simTier.reward - currentTier.reward)} vs realitas saat ini`
+                }
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 };
 
 export const ActiveOutletsBonusCard = ({ totalAssigned, activeCount, config, result }) => {
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [simulatedActive, setSimulatedActive] = useState(activeCount);
   if (!config || !config.tiers) return null;
   const percent = totalAssigned > 0 ? (activeCount / totalAssigned) * 100 : 0;
+  const simPercent = totalAssigned > 0 ? (simulatedActive / totalAssigned) * 100 : 0;
 
   const getTier = (pct) => {
     let activeTier = null;
@@ -162,6 +275,7 @@ export const ActiveOutletsBonusCard = ({ totalAssigned, activeCount, config, res
   };
 
   const currentTier = getTier(percent);
+  const simTier = getTier(simPercent);
 
   return (
     <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-5 space-y-4">
@@ -185,6 +299,69 @@ export const ActiveOutletsBonusCard = ({ totalAssigned, activeCount, config, res
       <div className="pt-2 border-t border-slate-50 dark:border-slate-800 flex items-center justify-between">
         <span className="text-xs text-slate-500">Current Reward:</span>
         <span className="text-sm font-bold text-amber-600">{formatRp(currentTier ? currentTier.reward : 0)}</span>
+      </div>
+
+      {/* Simulator Toggle */}
+      <div className="pt-2 border-t border-slate-50 dark:border-slate-800">
+        <button 
+          onClick={() => setIsSimulating(!isSimulating)}
+          className="w-full flex items-center justify-center gap-2 py-2 bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 rounded-lg text-xs font-bold hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors"
+        >
+          <Calculator className="w-3.5 h-3.5" />
+          {isSimulating ? 'Tutup Simulasi' : 'Buka Simulasi'}
+          {isSimulating ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+        </button>
+        
+        {isSimulating && (
+          <div className="mt-3 space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-500 uppercase">Proyeksi Active Outlets</label>
+                <div className="flex items-center gap-2">
+                  <input 
+                    type="number" 
+                    min="0" 
+                    max={totalAssigned}
+                    value={simulatedActive} 
+                    onChange={e => setSimulatedActive(Math.max(0, Math.min(totalAssigned, Number(e.target.value))))} 
+                    className="w-20 text-right text-sm font-bold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 focus:ring-2 focus:ring-amber-500 outline-none transition-shadow"
+                  />
+                  <span className="text-xs text-slate-400 font-medium">/ {totalAssigned}</span>
+                </div>
+              </div>
+              <input 
+                type="range" 
+                min="0" 
+                max={totalAssigned}
+                step="1" 
+                value={simulatedActive} 
+                onChange={e => setSimulatedActive(Number(e.target.value))} 
+                className="w-full accent-amber-600" 
+              />
+              <div className="flex justify-between text-[10px] text-slate-400 font-medium">
+                <span>0</span><span>{totalAssigned} outlets</span>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 text-center">
+                <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">Active Rate</p>
+                <p className={`text-lg font-bold ${simPercent >= 100 ? 'text-emerald-500' : 'text-slate-900 dark:text-white'}`}>{Math.round(simPercent)}%</p>
+              </div>
+              <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 text-center">
+                <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">Est. Bonus</p>
+                <p className="text-lg font-bold text-amber-600">{formatRp(simTier ? simTier.reward : 0)}</p>
+              </div>
+            </div>
+            {simTier && currentTier && simTier.reward !== currentTier.reward && (
+              <div className={`text-xs font-bold text-center py-2.5 rounded-lg ${simTier.reward > currentTier.reward ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400' : 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400'}`}>
+                {simTier.reward > currentTier.reward 
+                  ? `+${formatRp(simTier.reward - currentTier.reward)} vs realitas saat ini` 
+                  : `${formatRp(simTier.reward - currentTier.reward)} vs realitas saat ini`
+                }
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

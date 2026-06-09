@@ -33,7 +33,7 @@ const getDefaultPercentageConfig = (level) => {
   return {
     base_reward: base,
     tiers: [
-      { threshold: 50, reward: Math.round(base * 0.50), label: '50%' },
+      { threshold: 90, reward: Math.round(base * 0.50), label: '90%' },
       { threshold: 100, reward: base, label: '100%' },
       { threshold: 110, reward: Math.round(base * 1.25), label: '110%' }
     ]
@@ -106,7 +106,7 @@ const getUserDashboardData = async (userId) => {
   if (!userRows.length) throw new Error('User not found');
   const user = userRows[0];
 
-  const targetRows = await sql`SELECT target_be, percentage_config, volume_config, active_outlets_config FROM targets WHERE user_id = ${userId} AND month = ${month} AND year = ${year}`;
+  const targetRows = await sql`SELECT id, target_be, percentage_config, volume_config, active_outlets_config FROM targets WHERE user_id = ${userId} AND month = ${month} AND year = ${year}`;
   let targetData = targetRows[0] || null;
 
   if (!targetData) {
@@ -119,9 +119,17 @@ const getUserDashboardData = async (userId) => {
       INSERT INTO targets (id, user_id, month, year, target_be, percentage_config, volume_config, active_outlets_config)
       VALUES (gen_random_uuid(), ${userId}, ${month}, ${year}, ${defaultTarget}, ${JSON.stringify(pc)}::jsonb, ${JSON.stringify(vc)}::jsonb, ${JSON.stringify(ac)}::jsonb)
       ON CONFLICT (user_id, month, year) DO UPDATE SET target_be = EXCLUDED.target_be
-      RETURNING target_be, percentage_config, volume_config, active_outlets_config
+      RETURNING id, target_be, percentage_config, volume_config, active_outlets_config
     `;
     targetData = insertRes[0];
+  } else {
+    // Auto-migrate old percentage config (threshold 50%) to new (threshold 90%)
+    const pc = targetData.percentage_config;
+    if (pc && pc.tiers && pc.tiers[0] && pc.tiers[0].threshold === 50) {
+      const newPc = getDefaultPercentageConfig(user.level);
+      await sql`UPDATE targets SET percentage_config = ${JSON.stringify(newPc)}::jsonb WHERE id = ${targetData.id}`;
+      targetData.percentage_config = newPc;
+    }
   }
 
   const salesSum = await sql`SELECT COALESCE(SUM(volume_be), 0) as total FROM sales_records WHERE sales_id = ${userId} AND record_date >= ${start}`;
