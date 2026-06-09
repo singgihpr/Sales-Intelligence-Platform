@@ -4,6 +4,7 @@ import xlsx from 'xlsx';
 import Busboy from 'busboy';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { randomUUID } from 'crypto';
 
 const rawDbUrl = process.env.DATABASE_URL || '';
 const DATABASE_URL = rawDbUrl.replace(/([?&])channel_binding=[^&]*&?/g, '$1').replace(/[?&]$/, '');
@@ -16,6 +17,172 @@ const parseExcelDate = (val) => {
   if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
   const d = val instanceof Date ? val : new Date(Math.round((val - 25569) * 86400 * 1000));
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+};
+
+// --- Ayotama Parser Helpers ---
+const extractKgFromName = (name) => {
+  if (!name) return 10; // default fallback
+  // Match patterns like: "9KG", "17KG", "12,5 KG", "12.5 KG"
+  const match = String(name).match(/(\d+(?:[.,]\d+)?)\s*KG/i);
+  if (match) {
+    return parseFloat(match[1].replace(',', '.'));
+  }
+  return 10; // default fallback
+};
+
+const convertToBE = (boxCount, kg) => {
+  return (Number(boxCount) * Number(kg)) / 12;
+};
+
+const levenshteinDistance = (a, b) => {
+  const matrix = [];
+  for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+  for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+  for (let i = 1; i <= b.length; i++) {
+    for (let j = 1; j <= a.length; j++) {
+      matrix[i][j] = b.charAt(i - 1) === a.charAt(j - 1)
+        ? matrix[i - 1][j - 1]
+        : Math.min(
+            matrix[i - 1][j - 1] + 1,
+            Math.min(matrix[i][j - 1] + 1, matrix[i - 1][j] + 1)
+          );
+    }
+  }
+  return matrix[b.length][a.length];
+};
+
+const fuzzyMatchOutlet = (name, outletsList) => {
+  const normalized = String(name).toUpperCase().trim();
+  let bestMatch = null;
+  let bestScore = Infinity;
+  for (const outlet of outletsList) {
+    const outletName = String(outlet.name).toUpperCase().trim();
+    const dist = levenshteinDistance(normalized, outletName);
+    const maxLen = Math.max(normalized.length, outletName.length);
+    const similarity = maxLen > 0 ? (1 - dist / maxLen) : 0;
+    if (similarity >= 0.7 && dist < bestScore) {
+      bestScore = dist;
+      bestMatch = outlet;
+    }
+  }
+  return bestMatch;
+};
+
+const detectFileFormat = (rows) => {
+  // Ayotama format: row[1][1] = 'Rincian Faktur Penjualan'
+  if (rows.length > 1 && String(rows[1]?.[1]).includes('Rincian Faktur')) {
+    return 'ayotama';
+  }
+  return 'unknown';
+};
+
+const parseAyotamaRows = (rows, allOutlets, allUsers) => {
+  // Find header row (row 5, index 4) and date columns
+  const headerRow = rows[4];
+  if (!headerRow) return { total: 0, valid: 0, invalid: 0, rows: [] };
+
+  const dateColumns = [];
+  for (let i = 7; i < headerRow.length; i++) {
+    const val = headerRow[i];
+    if (val && (typeof val === 'number' || val instanceof Date)) {
+      const dateStr = parseExcelDate(val);
+      if (dateStr) dateColumns.push({ index: i, date: dateStr });
+    }
+  }
+
+  if (dateColumns.length === 0) {
+    return { action: 'preview', total: 0, valid: 0, invalid: 0, rows: [], error: 'No date columns found in header row' };
+  }
+
+  // Build branch-to-salesman mapping dynamically from users
+  const salesUsers = allUsers.filter(u => u.role === 'sales');
+  const branchMap = {};
+  for (let i = 0; i < salesUsers.length; i++) {
+    branchMap[i + 1] = salesUsers[i];
+  }
+  const fallbackUser = salesUsers[0] || { id: process.env.DEFAULT_USER_ID, name: 'Default Sales' };
+
+  const preview = [];
+  let currentBranch = '';
+  let currentOutlet = '';
+  let currentOutletMatch = null;
+
+  for (let rowIdx = 5; rowIdx < rows.length; rowIdx++) {
+    const row = rows[rowIdx];
+    if (!row || row.length < 7) continue;
+
+    // Check if this is a footer/page row
+    if (String(row[1]).includes('Halaman')) break;
+
+    // Extract branch code if present in col C
+    const branchCell = String(row[2] || '').trim();
+    if (branchCell && branchCell.match(/^\d{2}\s/)) {
+      currentBranch = branchCell;
+    }
+
+    // Extract outlet name if present in col D; carry forward if empty
+    const outletCell = String(row[3] || '').trim();
+    if (outletCell) {
+      currentOutlet = outletCell;
+      currentOutletMatch = fuzzyMatchOutlet(outletCell, allOutlets);
+    }
+
+    const unitType = String(row[4] || '').trim().toUpperCase();
+    const productName = String(row[6] || '').trim();
+
+    if (!productName) continue;
+
+    // Skip unsupported unit types
+    if (!['BOX', 'KG', 'PAX', 'PCS', 'KRJ'].includes(unitType)) continue;
+
+    const kg = extractKgFromName(productName);
+    let volumeBE = 0;
+    if (unitType === 'BOX') {
+      // convertToBE expects (boxCount, kg)
+      volumeBE = convertToBE(1, kg);
+    } else if (unitType === 'KG') {
+      // Already in KG, convert directly: qty KG / 12 = BE
+      volumeBE = 1 / 12;
+    } else {
+      // PAX, PCS, KRJ — also extract KG from name and convert
+      volumeBE = convertToBE(1, kg);
+    }
+
+    const branchNum = currentBranch ? parseInt(currentBranch.split(' ')[0]) : 1;
+    const salesUser = branchMap[branchNum] || fallbackUser;
+
+    // For each date column with non-zero value
+    for (const dc of dateColumns) {
+      const qty = Number(row[dc.index] || 0);
+      if (qty <= 0) continue;
+
+      const totalVolumeBE = Number((qty * volumeBE).toFixed(3));
+      const warnings = [];
+      if (!currentOutlet) warnings.push('Missing outlet name');
+      if (!currentOutletMatch) warnings.push(`Outlet baru akan dibuat: ${currentOutlet}`);
+      if (!dc.date) warnings.push(`Invalid date at col ${dc.index}`);
+
+      preview.push({
+        row: rowIdx + 1,
+        outletName: currentOutletMatch ? currentOutletMatch.name : (currentOutlet || '-'),
+        salesName: salesUser.name,
+        date: dc.date,
+        volume: totalVolumeBE,
+        sku: productName,
+        valid: true,
+        isNewOutlet: !currentOutletMatch,
+        warnings
+      });
+    }
+  }
+
+  return {
+    action: 'preview',
+    total: preview.length,
+    valid: preview.filter(p => p.valid).length,
+    invalid: preview.filter(p => !p.valid).length,
+    rows: preview
+  };
 };
 
 const verifyToken = (event) => {
@@ -740,58 +907,97 @@ const _handler = async (event, context) => {
                 const buffer = Buffer.concat(chunks);
                 const ext = (info.filename || '').split('.').pop()?.toLowerCase();
                 const isCsv = ext === 'csv';
-                let rows = [];
+                let workbook;
                 if (isCsv) {
                   const csvText = buffer.toString('utf-8');
-                  const workbook = xlsx.read(csvText, { type: 'string', cellDates: true });
-                  rows = xlsx.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+                  workbook = xlsx.read(csvText, { type: 'string', cellDates: true });
                 } else {
-                  const workbook = xlsx.read(buffer, { cellDates: true });
-                  rows = xlsx.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+                  workbook = xlsx.read(buffer, { cellDates: true });
                 }
-                rows = rows.map(r => ({ ...r, Date: parseExcelDate(r['Date']) }));
+                const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                // Get raw rows for format detection
+                const rawRows = xlsx.utils.sheet_to_json(sheet, { header: 1, raw: true });
+                const fileFormat = detectFileFormat(rawRows);
 
-                if (action === 'preview') {
-                  // Validate rows without inserting
+                if (fileFormat === 'ayotama') {
+                  // Ayotama format parsing
                   const allOutlets = await sql`SELECT id, name FROM outlets`;
-                  const allUsers = await sql`SELECT id, name FROM users WHERE role = 'sales'`;
-                  const outletMap = Object.fromEntries(allOutlets.map(o => [o.name, o.id]));
-                  const userMap = Object.fromEntries(allUsers.map(u => [u.name, u.id]));
+                  const allUsers = await sql`SELECT id, name, role FROM users`;
 
-                  const preview = rows.map((r, idx) => {
-                    const outletName = r['Outlet Name'];
-                    const salesName = r['Sales Name'];
-                    const date = r['Date'];
-                    const volume = r['Volume BE'];
-                    const sku = r['SKU'];
-                    const errors = [];
-                    if (!outletName) errors.push('Missing Outlet Name');
-                    else if (!outletMap[outletName]) errors.push(`Outlet not found: ${outletName}`);
-                    if (!salesName) errors.push('Missing Sales Name');
-                    else if (!userMap[salesName]) errors.push(`Salesman not found: ${salesName}`);
-                    if (!date) errors.push('Invalid Date');
-                    if (volume === undefined || volume === null || isNaN(Number(volume))) errors.push('Invalid Volume BE');
-                    return {
-                      row: idx + 2,
-                      outletName,
-                      salesName,
-                      date,
-                      volume: volume !== undefined ? Number(volume) : null,
-                      sku,
-                      valid: errors.length === 0,
-                      errors
-                    };
-                  });
-                  resolve({ statusCode: 200, body: JSON.stringify({ action: 'preview', total: rows.length, valid: preview.filter(p => p.valid).length, invalid: preview.filter(p => !p.valid).length, rows: preview }) });
+                  if (action === 'preview') {
+                    const result = parseAyotamaRows(rawRows, allOutlets, allUsers);
+                    resolve({ statusCode: 200, body: JSON.stringify(result) });
+                  } else {
+                    // Import Ayotama rows — auto-create missing outlets
+                    const preview = parseAyotamaRows(rawRows, allOutlets, allUsers);
+                    const validRows = preview.rows.filter(r => r.valid);
+
+                    // Group new outlets
+                    const newOutletNames = new Set();
+                    for (const r of validRows) {
+                      if (r.isNewOutlet && r.outletName && r.outletName !== '-') {
+                        newOutletNames.add(r.outletName);
+                      }
+                    }
+
+                    // Create missing outlets
+                    for (const name of newOutletNames) {
+                      await sql`
+                        INSERT INTO outlets (id, name, type, address, contact_person, branch_area)
+                        VALUES (${randomUUID()}, ${name}, '', '', '', '')
+                        ON CONFLICT DO NOTHING
+                      `;
+                    }
+
+                    // Re-fetch outlets to get IDs for new ones
+                    const refreshedOutlets = await sql`SELECT id, name FROM outlets`;
+                    const outletIdMap = Object.fromEntries(refreshedOutlets.map(o => [o.name, o.id]));
+                    const userIdMap = Object.fromEntries(allUsers.map(u => [u.name, u.id]));
+
+                    // Batch insert using UNNEST (PostgreSQL array expansion)
+                    const BATCH_SIZE = 50;
+                    let insertedCount = 0;
+                    for (let i = 0; i < validRows.length; i += BATCH_SIZE) {
+                      const batch = validRows.slice(i, i + BATCH_SIZE);
+                      const ids = [];
+                      const outletIds = [];
+                      const salesIds = [];
+                      const dates = [];
+                      const volumes = [];
+                      const skus = [];
+
+                      for (const r of batch) {
+                        const outletId = outletIdMap[r.outletName];
+                        const salesId = userIdMap[r.salesName];
+                        if (!outletId || !salesId) continue;
+                        ids.push(randomUUID());
+                        outletIds.push(outletId);
+                        salesIds.push(salesId);
+                        dates.push(r.date);
+                        volumes.push(r.volume);
+                        skus.push(r.sku || null);
+                      }
+
+                      if (ids.length > 0) {
+                        await sql`
+                          INSERT INTO sales_records (id, outlet_id, sales_id, record_date, volume_be, sku_name)
+                          SELECT * FROM UNNEST(
+                            ${ids}::uuid[],
+                            ${outletIds}::uuid[],
+                            ${salesIds}::uuid[],
+                            ${dates}::date[],
+                            ${volumes}::numeric[],
+                            ${skus}::text[]
+                          )
+                          ON CONFLICT DO NOTHING
+                        `;
+                        insertedCount += ids.length;
+                      }
+                    }
+                    resolve({ statusCode: 200, body: JSON.stringify({ success: true, inserted: insertedCount, totalPreviewed: preview.rows.length, newOutletsCreated: newOutletNames.size }) });
+                  }
                 } else {
-                  // Upload / Import
-                  const queries = rows.map(r => sql`
-                    INSERT INTO sales_records (id, outlet_id, sales_id, record_date, volume_be, sku_name)
-                    VALUES (gen_random_uuid(), (SELECT id FROM outlets WHERE name = ${r['Outlet Name']}), (SELECT id FROM users WHERE name = ${r['Sales Name']}), ${r['Date']}, ${r['Volume BE']}, ${r['SKU']||null})
-                    ON CONFLICT DO NOTHING
-                  `);
-                  await Promise.all(queries);
-                  resolve({ statusCode: 200, body: JSON.stringify({ success: true, inserted: rows.length }) });
+                  resolve({ statusCode: 400, body: JSON.stringify({ error: 'Unsupported file format. Please upload Ayotama rincian faktur format (xlsx/xls).' }) });
                 }
               } catch (e) { resolve({ statusCode: 500, body: JSON.stringify({ error: e.message }) }); }
             });
