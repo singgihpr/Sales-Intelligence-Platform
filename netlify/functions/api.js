@@ -169,7 +169,7 @@ const getUserDashboardData = async (userId) => {
   `;
 
   const skuPrevMonth = await sql`
-    SELECT sku_name, SUM(volume_be) as volume FROM sales_records
+    SELECT sku_name, SUM(volume_be) as volume, COUNT(*) as transaction_count FROM sales_records
     WHERE sales_id = ${userId} AND record_date >= ${prevMonthStart} AND record_date <= ${prevMonthEnd}
       AND sku_name IS NOT NULL AND sku_name <> ''
     GROUP BY sku_name
@@ -196,27 +196,116 @@ const getUserDashboardData = async (userId) => {
     ORDER BY sr.sku_name, outlet_volume DESC
   `;
 
-  const prevMonthMap = Object.fromEntries(skuPrevMonth.map(r => [r.sku_name, parseFloat(r.volume || 0)]));
+  // Get weekly breakdown for current month (4 weeks)
+  const skuWeekly = await sql`
+    SELECT 
+      sku_name,
+      EXTRACT(WEEK FROM record_date) as week_num,
+      SUM(volume_be) as weekly_volume
+    FROM sales_records
+    WHERE sales_id = ${userId} AND record_date >= ${start} AND record_date <= ${end}
+      AND sku_name IS NOT NULL AND sku_name <> ''
+    GROUP BY sku_name, EXTRACT(WEEK FROM record_date)
+    ORDER BY sku_name, week_num
+  `;
+
+  // Get detailed transactions per SKU for current month
+  const skuTransactions = await sql`
+    SELECT 
+      sr.sku_name,
+      sr.record_date::text as date,
+      sr.volume_be as be,
+      o.name as outlet_name
+    FROM sales_records sr
+    LEFT JOIN outlets o ON o.id = sr.outlet_id
+    WHERE sr.sales_id = ${userId} AND sr.record_date >= ${start} AND sr.record_date <= ${end}
+      AND sr.sku_name IS NOT NULL AND sr.sku_name <> ''
+    ORDER BY sr.sku_name, sr.record_date DESC
+  `;
+
+  // Get detailed transactions per SKU for PREVIOUS month
+  const skuPrevTransactions = await sql`
+    SELECT 
+      sr.sku_name,
+      sr.record_date::text as date,
+      sr.volume_be as be,
+      o.name as outlet_name
+    FROM sales_records sr
+    LEFT JOIN outlets o ON o.id = sr.outlet_id
+    WHERE sr.sales_id = ${userId} AND sr.record_date >= ${prevMonthStart} AND sr.record_date <= ${prevMonthEnd}
+      AND sr.sku_name IS NOT NULL AND sr.sku_name <> ''
+    ORDER BY sr.sku_name, sr.record_date DESC
+  `;
+
+  const prevMonthMap = Object.fromEntries(skuPrevMonth.map(r => [
+    r.sku_name, 
+    { volume: parseFloat(r.volume || 0), transactionCount: parseInt(r.transaction_count || 0) }
+  ]));
   const lastYearMap = Object.fromEntries(skuLastYear.map(r => [r.sku_name, parseFloat(r.volume || 0)]));
-  const topOutletMap = Object.fromEntries(skuTopOutlets.map(r => [r.sku_name, r.outlet_name]));
+  const topOutletMap = Object.fromEntries(skuTopOutlets.map(r => [r.sku_name, { name: r.outlet_name, volume: parseFloat(r.outlet_volume || 0) }]));
+
+  // Group weekly data by sku
+  const weeklyMap = {};
+  for (const row of skuWeekly) {
+    if (!weeklyMap[row.sku_name]) weeklyMap[row.sku_name] = [];
+    weeklyMap[row.sku_name].push(parseFloat(row.weekly_volume || 0));
+  }
+
+  // Group transactions by sku (current month)
+  const transactionsMap = {};
+  for (const row of skuTransactions) {
+    if (!transactionsMap[row.sku_name]) transactionsMap[row.sku_name] = [];
+    transactionsMap[row.sku_name].push({
+      date: row.date,
+      be: parseFloat(row.be || 0),
+      outlet: row.outlet_name || '-'
+    });
+  }
+
+  // Group transactions by sku (previous month)
+  const prevTransactionsMap = {};
+  for (const row of skuPrevTransactions) {
+    if (!prevTransactionsMap[row.sku_name]) prevTransactionsMap[row.sku_name] = [];
+    prevTransactionsMap[row.sku_name].push({
+      date: row.date,
+      be: parseFloat(row.be || 0),
+      outlet: row.outlet_name || '-'
+    });
+  }
 
   const totalSkuVolume = skuCurrent.reduce((sum, r) => sum + parseFloat(r.volume || 0), 0);
 
   const skuPerformance = skuCurrent.map(r => {
     const volume = parseFloat(r.volume || 0);
-    const prev = prevMonthMap[r.sku_name] || 0;
+    const prevData = prevMonthMap[r.sku_name] || { volume: 0, transactionCount: 0 };
+    const prev = prevData.volume;
     const lastY = lastYearMap[r.sku_name] || 0;
     const momTrend = prev > 0 ? ((volume - prev) / prev) * 100 : (volume > 0 ? 100 : 0);
     const yoyTrend = lastY > 0 ? ((volume - lastY) / lastY) * 100 : (volume > 0 ? 100 : 0);
+    const topOutletData = topOutletMap[r.sku_name] || { name: '-', volume: 0 };
+    const weekly = weeklyMap[r.sku_name] || [];
+    // Pad to 4 weeks if less
+    while (weekly.length < 4) weekly.unshift(0);
+    // Take last 4 weeks
+    const monthlyHistory = weekly.slice(-4);
+    const topOutletContrib = volume > 0 ? Math.round((topOutletData.volume / volume) * 100) : 0;
+    
     return {
       name: r.sku_name,
       volume,
       transactionCount: parseInt(r.transaction_count || 0),
       avgOrder: parseFloat(r.avg_order || 0),
-      topOutlet: topOutletMap[r.sku_name] || '-',
+      topOutlet: topOutletData.name,
+      topOutletVolume: topOutletData.volume,
+      topOutletContrib,
       mixPercent: totalSkuVolume > 0 ? (volume / totalSkuVolume) * 100 : 0,
       momTrend,
-      yoyTrend
+      yoyTrend,
+      prevVolume: prev,
+      prevTransactionCount: prevData.transactionCount,
+      monthlyHistory,
+      transactions: transactionsMap[r.sku_name] || [],
+      prevTransactions: prevTransactionsMap[r.sku_name] || []
     };
   });
 

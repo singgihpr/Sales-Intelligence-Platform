@@ -22,7 +22,10 @@ import {
   History,
   MapPin,
   Navigation,
-  ShoppingBag
+  ShoppingBag,
+  X,
+  BarChart3,
+  Lightbulb
 } from 'lucide-react';
 
 // --- Mock Data ---
@@ -89,9 +92,39 @@ const TEAM_STATS = [
 ];
 
 const SKU_PERFORMANCE = [
-  { name: "Pisang Cavendish", volume: 450, trend: 15, color: "bg-yellow-400" },
-  { name: "Nanas Madu", volume: 210, trend: -5, color: "bg-orange-400" },
-  { name: "Jeruk Siam", volume: 185.5, trend: 22, color: "bg-emerald-400" }
+  { 
+    name: "Pisang Cavendish", 
+    volume: 450, 
+    trendMonthly: 8,
+    color: "bg-yellow-400",
+    monthlyHistory: [100, 110, 130, 110],
+    drivers: ["Promo Bundle aktif", "Musim panen melimpah"],
+    topOutlet: "Toko Buah Sejahtera",
+    topOutletContrib: 35,
+    action: "Tambah stok di Toko Buah Sejahtera (+20 karton)"
+  },
+  { 
+    name: "Nanas Madu", 
+    volume: 210, 
+    trendMonthly: -12,
+    color: "bg-orange-400",
+    monthlyHistory: [70, 65, 50, 25],
+    drivers: ["Stok competitor masuk", "Cuaca buruk mempengaruhi supply"],
+    topOutlet: "Fresh Market Cilandak",
+    topOutletContrib: 28,
+    action: "Diskusikan promo bundling dengan Fresh Market Cilandak"
+  },
+  { 
+    name: "Jeruk Siam", 
+    volume: 185.5, 
+    trendMonthly: 5,
+    color: "bg-emerald-400",
+    monthlyHistory: [40, 45, 50, 50.5],
+    drivers: ["Permintaan dari segmen hotel meningkat"],
+    topOutlet: "Hotel Grand Menteng",
+    topOutletContrib: 22,
+    action: "Jadwalkan kunjungan rutin ke Hotel Grand Menteng"
+  }
 ];
 
 const SCHEDULE = [
@@ -201,9 +234,127 @@ const Navbar = ({ role, setRole, isOnline }) => (
   </nav>
 );
 
+const SkuDetailModal = ({ sku, onClose }) => {
+  if (!sku) return null;
+  
+  const maxHistory = Math.max(...sku.monthlyHistory, 1);
+  
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center">
+      <div 
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity" 
+        onClick={onClose}
+      ></div>
+      <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-t-2xl sm:rounded-2xl max-h-[85vh] overflow-y-auto animate-in slide-in-from-bottom-8 duration-300 shadow-2xl">
+        <div className="sticky top-0 bg-white dark:bg-slate-900 z-10 p-5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
+          <div>
+            <h3 className="font-bold text-lg text-slate-900 dark:text-white">{sku.name}</h3>
+            <p className="text-xs text-slate-500 font-medium">Detail Analisis Produk</p>
+          </div>
+          <button 
+            onClick={onClose} 
+            className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          >
+            <X className="w-5 h-5 text-slate-500" />
+          </button>
+        </div>
+        
+        <div className="p-5 space-y-6">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
+              <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">Volume Bulan Ini</p>
+              <p className="text-xl font-bold text-slate-900 dark:text-white">{sku.volume} <span className="text-xs font-normal text-slate-400">BE</span></p>
+            </div>
+            <div className={`p-4 rounded-xl border ${
+              sku.trendMonthly > 0 
+                ? 'bg-emerald-50 border-emerald-100 dark:bg-emerald-950/30 dark:border-emerald-900/50' 
+                : 'bg-red-50 border-red-100 dark:bg-red-950/30 dark:border-red-900/50'
+            }`}>
+              <p className="text-[10px] uppercase font-bold tracking-wider mb-1 text-slate-500 dark:text-slate-400">vs Bulan Lalu</p>
+              <div className={`text-xl font-bold flex items-center gap-1 ${sku.trendMonthly > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                {sku.trendMonthly > 0 ? <ArrowUpRight className="w-5 h-5"/> : <ArrowDownRight className="w-5 h-5"/>}
+                {Math.abs(sku.trendMonthly)}%
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <h4 className="font-bold text-sm mb-3 flex items-center gap-2 text-slate-900 dark:text-white">
+              <BarChart3 className="w-4 h-4 text-blue-500"/> Volume 4 Minggu Terakhir
+            </h4>
+            <div className="h-40 flex items-end gap-3 bg-slate-50 dark:bg-slate-800/30 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
+              {sku.monthlyHistory.map((val, idx) => {
+                const height = maxHistory > 0 ? (val / maxHistory) * 100 : 0;
+                return (
+                  <div key={idx} className="flex-1 flex flex-col items-center gap-2 justify-end h-full">
+                    <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300">{val}</span>
+                    <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-t-md relative overflow-hidden" style={{ height: `${Math.max(height, 5)}%` }}>
+                       <div className={`absolute bottom-0 left-0 right-0 rounded-t-md transition-all duration-700 ease-out ${
+                         sku.trendMonthly > 0 ? 'bg-blue-500' : 'bg-amber-500'
+                       }`} style={{ height: '100%' }}></div>
+                    </div>
+                    <span className="text-[10px] text-slate-400 font-medium">M{idx+1}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <h4 className="font-bold text-sm mb-3 flex items-center gap-2 text-slate-900 dark:text-white">
+              <Target className="w-4 h-4 text-purple-500"/> Faktor Penyebab Perubahan
+            </h4>
+            <div className="space-y-2">
+              {sku.drivers.map((driver, idx) => (
+                <div key={idx} className="flex items-center gap-3 text-sm text-slate-700 dark:text-slate-300 bg-purple-50 dark:bg-purple-950/30 p-3 rounded-lg border border-purple-100 dark:border-purple-900/50">
+                  <div className="w-2 h-2 rounded-full bg-purple-500 shrink-0"></div>
+                  <span className="font-medium">{driver}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+             <h4 className="font-bold text-sm mb-3 flex items-center gap-2 text-slate-900 dark:text-white">
+              <Store className="w-4 h-4 text-orange-500"/> Kontribusi Outlet Terbesar
+            </h4>
+            <Card className="flex items-center justify-between p-4">
+               <div>
+                 <p className="text-sm font-bold text-slate-900 dark:text-white">{sku.topOutlet}</p>
+                 <p className="text-xs text-slate-500 mt-0.5">{sku.topOutletContrib}% dari total volume SKU ini</p>
+               </div>
+               <div className="h-12 w-12 rounded-full bg-orange-100 dark:bg-orange-950 flex items-center justify-center">
+                 <span className="text-xs font-bold text-orange-600">{sku.topOutletContrib}%</span>
+               </div>
+            </Card>
+          </div>
+
+          <div>
+            <h4 className="font-bold text-sm mb-3 flex items-center gap-2 text-slate-900 dark:text-white">
+              <Lightbulb className="w-4 h-4 text-amber-500"/> Rekomendasi Aksi
+            </h4>
+            <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-900/50 p-4 rounded-xl flex items-start gap-3">
+              <div className="bg-amber-500 p-1.5 rounded-lg text-white mt-0.5 shrink-0">
+                <Navigation className="w-4 h-4"/>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-amber-900 dark:text-amber-200">Saran Tindak Lanjut</p>
+                <p className="text-sm text-amber-800 dark:text-amber-300 mt-0.5 leading-relaxed">{sku.action}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div className="h-6"></div>
+      </div>
+    </div>
+  );
+};
+
 const SalesDashboard = ({ onVisitClick }) => {
   const [isSimulating, setIsSimulating] = useState(false);
   const [simulatedBE, setSimulatedBE] = useState(DASHBOARD_STATS.currentBE);
+  const [selectedSku, setSelectedSku] = useState(null);
 
   const attainment = Math.round((DASHBOARD_STATS.currentBE / DASHBOARD_STATS.monthlyTargetBE) * 100);
   const runRate = Math.round((DASHBOARD_STATS.currentBE / DASHBOARD_STATS.daysElapsed) * DASHBOARD_STATS.totalWorkingDays);
@@ -403,11 +554,19 @@ const SalesDashboard = ({ onVisitClick }) => {
             <div key={idx} className="space-y-1.5">
               <div className="flex justify-between text-xs font-bold">
                 <span className="text-slate-600 dark:text-slate-300">{sku.name}</span>
-                <span className="flex items-center gap-1">
+                <span className="flex items-center gap-2">
                   {sku.volume} BE
-                  <span className={sku.trend > 0 ? 'text-emerald-500' : 'text-red-500'}>
-                    ({sku.trend > 0 ? '+' : ''}{sku.trend}%)
-                  </span>
+                  <button 
+                    onClick={() => setSelectedSku(sku)}
+                    className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-bold transition-colors ${
+                      sku.trendMonthly > 0 
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400 hover:bg-emerald-200 dark:hover:bg-emerald-900' 
+                        : 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900'
+                    }`}
+                  >
+                    {sku.trendMonthly > 0 ? <ArrowUpRight className="w-3 h-3"/> : <ArrowDownRight className="w-3 h-3"/>}
+                    {Math.abs(sku.trendMonthly)}% vs bln lalu
+                  </button>
                 </span>
               </div>
               <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
@@ -482,6 +641,7 @@ const SalesDashboard = ({ onVisitClick }) => {
           ))}
         </div>
       </section>
+      {selectedSku && <SkuDetailModal sku={selectedSku} onClose={() => setSelectedSku(null)} />}
     </div>
   );
 };

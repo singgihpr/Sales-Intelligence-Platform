@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowUpRight, ArrowDownRight, Target, Package, ShoppingBag, Navigation, CheckCircle, Info, ChevronDown, ChevronUp, TrendingUp, TrendingDown, Minus, BarChart3 } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, Target, Package, ShoppingBag, Navigation, CheckCircle, Info, ChevronDown, ChevronUp, TrendingUp, TrendingDown, Minus, BarChart3, X, Store as StoreIcon } from 'lucide-react';
 import { BonusSummaryCard, PercentageBonusCard, VolumeBonusCard, ActiveOutletsBonusCard } from './BonusCards';
 
 const ProgressCircle = ({ percent, size = 160, strokeWidth = 12 }) => {
@@ -247,9 +247,162 @@ export default function SalesDashboard({ data, onVisitClick }) {
 }
 
 // --- SKU Analysis Sub-component ---
+function SkuDetailModal({ sku, onClose }) {
+  if (!sku) return null;
+  const monthlyHistory = sku.monthlyHistory || [sku.volume * 0.8, sku.volume * 0.9, sku.volume * 0.95, sku.volume];
+  const maxHistory = Math.max(...monthlyHistory, 1);
+  const topOutletContrib = sku.topOutletContrib || 0;
+  const transactions = sku.transactions || [];
+  const prevTransactions = sku.prevTransactions || [];
+  const trendColor = sku.momTrend > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400';
+  const trendBg = sku.momTrend > 0 ? 'bg-emerald-50 border-emerald-100 dark:bg-emerald-950/30 dark:border-emerald-900/50' : 'bg-red-50 border-red-100 dark:bg-red-950/30 dark:border-red-900/50';
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity" onClick={onClose}></div>
+      <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-t-2xl sm:rounded-2xl max-h-[85vh] overflow-y-auto animate-in slide-in-from-bottom-8 duration-300 shadow-2xl">
+        <div className="sticky top-0 bg-white dark:bg-slate-900 z-10 p-5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
+          <div>
+            <h3 className="font-bold text-lg text-slate-900 dark:text-white">{sku.name}</h3>
+            <p className="text-xs text-slate-500 font-medium">Detail Analisis Produk</p>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+            <X className="w-5 h-5 text-slate-500" />
+          </button>
+        </div>
+        <div className="p-5 space-y-6">
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
+              <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">Volume Bulan Ini</p>
+              <p className="text-xl font-bold text-slate-900 dark:text-white">{sku.volume.toFixed(1)} <span className="text-xs font-normal text-slate-400">BE</span></p>
+            </div>
+            <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
+              <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">Volume Bulan Lalu</p>
+              <p className="text-xl font-bold text-slate-900 dark:text-white">{sku.prevVolume > 0 ? sku.prevVolume.toFixed(1) : '0'} <span className="text-xs font-normal text-slate-400">BE</span></p>
+            </div>
+            <div className={`p-4 rounded-xl border ${trendBg}`}>
+              <p className="text-[10px] uppercase font-bold tracking-wider mb-1 text-slate-500 dark:text-slate-400">vs Bulan Lalu</p>
+              <div className={`text-xl font-bold flex items-center gap-1 ${trendColor}`}>
+                {sku.momTrend > 0 ? <TrendingUp className="w-5 h-5"/> : <TrendingDown className="w-5 h-5"/>}
+                {Math.abs(sku.momTrend).toFixed(1)}%
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <h4 className="font-bold text-sm mb-3 flex items-center gap-2 text-slate-900 dark:text-white">
+              <BarChart3 className="w-4 h-4 text-blue-500"/> Volume 4 Minggu Terakhir
+            </h4>
+            <div className="h-40 flex items-end gap-3 bg-slate-50 dark:bg-slate-800/30 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
+              {monthlyHistory.map((val, idx) => {
+                const height = maxHistory > 0 ? (val / maxHistory) * 100 : 0;
+                return (
+                  <div key={idx} className="flex-1 flex flex-col items-center gap-2 justify-end h-full">
+                    <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300">{val.toFixed ? val.toFixed(0) : val}</span>
+                    <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-t-md relative overflow-hidden" style={{ height: `${Math.max(height, 5)}%` }}>
+                       <div className={`absolute bottom-0 left-0 right-0 rounded-t-md transition-all duration-700 ease-out ${sku.momTrend > 0 ? 'bg-blue-500' : 'bg-amber-500'}`} style={{ height: '100%' }}></div>
+                    </div>
+                    <span className="text-[10px] text-slate-400 font-medium">M{idx+1}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+             <h4 className="font-bold text-sm mb-3 flex items-center gap-2 text-slate-900 dark:text-white">
+              <StoreIcon className="w-4 h-4 text-orange-500"/> Kontribusi Outlet Terbesar
+            </h4>
+            <Card className="flex items-center justify-between p-4">
+               <div>
+                 <p className="text-sm font-bold text-slate-900 dark:text-white">{sku.topOutlet}</p>
+                 <p className="text-xs text-slate-500 mt-0.5">{topOutletContrib}% dari total volume SKU ini</p>
+               </div>
+               <div className="h-12 w-12 rounded-full bg-orange-100 dark:bg-orange-950 flex items-center justify-center">
+                 <span className="text-xs font-bold text-orange-600">{topOutletContrib}%</span>
+               </div>
+            </Card>
+          </div>
+
+          {transactions.length > 0 && (
+            <div>
+              <h4 className="font-bold text-sm mb-1 flex items-center gap-2 text-slate-900 dark:text-white">
+                <Package className="w-4 h-4 text-emerald-500"/> Transaksi Bulan Ini ({transactions.length})
+              </h4>
+              <p className="text-xs text-slate-500 mb-3">
+                Total {sku.volume.toFixed(1)} BE
+                {sku.avgOrder > 0 ? ` — rata-rata ${sku.avgOrder.toFixed(1)} BE/order` : ''}
+              </p>
+              <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl overflow-hidden">
+                <div className="overflow-x-auto max-h-48 overflow-y-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-emerald-50 dark:bg-emerald-900/30 sticky top-0">
+                      <tr>
+                        <th className="px-3 py-2 text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">Tanggal</th>
+                        <th className="px-3 py-2 text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">Outlet</th>
+                        <th className="px-3 py-2 text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider text-right">BE</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                      {transactions.map((tx, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                          <td className="px-3 py-2 text-xs text-slate-700 dark:text-slate-300">{new Date(tx.date).toLocaleDateString('id-ID')}</td>
+                          <td className="px-3 py-2 text-xs text-slate-700 dark:text-slate-300 truncate max-w-[120px]" title={tx.outlet}>{tx.outlet}</td>
+                          <td className="px-3 py-2 text-xs font-bold text-slate-900 dark:text-white text-right">{tx.be.toFixed(1)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {prevTransactions.length > 0 && (
+            <div>
+              <h4 className="font-bold text-sm mb-1 flex items-center gap-2 text-slate-900 dark:text-white">
+                <Package className="w-4 h-4 text-slate-400"/> Transaksi Bulan Lalu ({prevTransactions.length})
+              </h4>
+              <p className="text-xs text-slate-500 mb-3">
+                Total {sku.prevVolume.toFixed(1)} BE
+                {sku.prevTransactionCount > 0 && sku.prevVolume > 0 ? ` — rata-rata ${(sku.prevVolume / sku.prevTransactionCount).toFixed(1)} BE/order` : ''}
+              </p>
+              <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl overflow-hidden">
+                <div className="overflow-x-auto max-h-48 overflow-y-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-slate-100 dark:bg-slate-700 sticky top-0">
+                      <tr>
+                        <th className="px-3 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Tanggal</th>
+                        <th className="px-3 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Outlet</th>
+                        <th className="px-3 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right">BE</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                      {prevTransactions.map((tx, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                          <td className="px-3 py-2 text-xs text-slate-700 dark:text-slate-300">{new Date(tx.date).toLocaleDateString('id-ID')}</td>
+                          <td className="px-3 py-2 text-xs text-slate-700 dark:text-slate-300 truncate max-w-[120px]" title={tx.outlet}>{tx.outlet}</td>
+                          <td className="px-3 py-2 text-xs font-bold text-slate-900 dark:text-white text-right">{tx.be.toFixed(1)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+        </div>
+        <div className="h-6"></div>
+      </div>
+    </div>
+  );
+}
+
 function SkuAnalysisSection({ skuPerformance }) {
   const [showInfo, setShowInfo] = useState(false);
   const [expandedIdx, setExpandedIdx] = useState(null);
+  const [selectedSku, setSelectedSku] = useState(null);
 
   const formatTrend = (val) => {
     if (val > 0) return { icon: TrendingUp, color: 'text-emerald-600', bg: 'bg-emerald-50', sign: '+' };
@@ -277,7 +430,6 @@ function SkuAnalysisSection({ skuPerformance }) {
             <div className="space-y-3 text-sm text-slate-600 dark:text-slate-300">
               <p><strong>Ranking:</strong> Diurutkan berdasarkan total <strong>Box Equivalent (BE)</strong> bulan ini.</p>
               <p><strong>MoM Trend:</strong> Perbandingan volume bulan ini vs <strong>bulan lalu</strong>.</p>
-              <p><strong>YoY Trend:</strong> Perbandingan volume bulan ini vs <strong>bulan yang sama tahun lalu</strong>.</p>
               <p><strong>Mix %:</strong> Kontribusi SKU terhadap total BE semua produk.</p>
               <p><strong>Transaksi:</strong> Jumlah catatan/entry untuk SKU tersebut.</p>
               <p><strong>Rata-rata:</strong> Volume BE rata-rata per transaksi.</p>
@@ -296,9 +448,7 @@ function SkuAnalysisSection({ skuPerformance }) {
         {(skuPerformance || []).map((sku, idx) => {
           const isExpanded = expandedIdx === idx;
           const mom = formatTrend(sku.momTrend);
-          const yoy = formatTrend(sku.yoyTrend);
           const MomIcon = mom.icon;
-          const YoyIcon = yoy.icon;
           const barWidth = skuPerformance.length > 0 ? Math.min((sku.volume / (skuPerformance[0].volume || 1)) * 100, 100) : 0;
 
           return (
@@ -326,23 +476,18 @@ function SkuAnalysisSection({ skuPerformance }) {
               {/* Expanded Detail */}
               {isExpanded && (
                 <div className="bg-slate-50 dark:bg-slate-800/40 rounded-xl p-3 space-y-2.5 animate-in fade-in slide-in-from-top-2 duration-200">
-                  {/* Trends */}
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className={`flex items-center gap-1.5 p-2 rounded-lg ${mom.bg} dark:bg-opacity-20`}>
-                      <MomIcon className={`w-3.5 h-3.5 ${mom.color}`} />
-                      <div>
-                        <p className="text-[10px] font-bold text-slate-500 uppercase">vs Bulan Lalu</p>
-                        <p className={`text-xs font-bold ${mom.color}`}>{mom.sign}{sku.momTrend.toFixed(1)}%</p>
-                      </div>
+                  {/* Trends - Only MoM, clickable */}
+                  <button
+                    onClick={() => setSelectedSku(sku)}
+                    className={`w-full flex items-center gap-1.5 p-2 rounded-lg ${mom.bg} dark:bg-opacity-20 hover:opacity-80 transition-opacity text-left`}
+                  >
+                    <MomIcon className={`w-3.5 h-3.5 ${mom.color}`} />
+                    <div className="flex-1">
+                      <p className="text-[10px] font-bold text-slate-500 uppercase">vs Bulan Lalu (Klik untuk detail)</p>
+                      <p className={`text-xs font-bold ${mom.color}`}>{mom.sign}{sku.momTrend.toFixed(1)}%</p>
                     </div>
-                    <div className={`flex items-center gap-1.5 p-2 rounded-lg ${yoy.bg} dark:bg-opacity-20`}>
-                      <YoyIcon className={`w-3.5 h-3.5 ${yoy.color}`} />
-                      <div>
-                        <p className="text-[10px] font-bold text-slate-500 uppercase">vs Tahun Lalu</p>
-                        <p className={`text-xs font-bold ${yoy.color}`}>{yoy.sign}{sku.yoyTrend.toFixed(1)}%</p>
-                      </div>
-                    </div>
-                  </div>
+                    <ArrowUpRight className={`w-3.5 h-3.5 ${mom.color} opacity-50`} />
+                  </button>
 
                   {/* Metrics */}
                   <div className="grid grid-cols-3 gap-2 text-center">
@@ -365,6 +510,7 @@ function SkuAnalysisSection({ skuPerformance }) {
           );
         })}
       </Card>
+      {selectedSku && <SkuDetailModal sku={selectedSku} onClose={() => setSelectedSku(null)} />}
     </section>
   );
 }
