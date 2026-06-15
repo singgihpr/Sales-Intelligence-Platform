@@ -928,6 +928,11 @@ const _handler = async (event, context) => {
         body: JSON.stringify({ data, total, page, limit, totalPages: Math.ceil(total / limit) })
       });
 
+      if (type === 'profile') {
+        if (!user) return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) };
+        const dataRes = await sql`SELECT id, name, email, role, region, level, created_at FROM users WHERE id = ${user.id}`;
+        return { statusCode: 200, body: JSON.stringify({ data: dataRes[0] || null }) };
+      }
       if (type === 'users') {
         const dataRes = await sql`
           SELECT id, name, email, role, region, level, created_at FROM users
@@ -1265,6 +1270,19 @@ const _handler = async (event, context) => {
     // --- PUT ---
     if (event.httpMethod === 'PUT' && isJson) {
       const body = JSON.parse(event.body);
+      if (type === 'profile') {
+        if (!user) return { statusCode: 401, body: JSON.stringify({ error: 'Unauthorized' }) };
+        const updateName = body.name || null;
+        const updatePassword = body.password && body.password !== '••••••' ? await bcrypt.hash(body.password, 10) : null;
+        const res = await sql`
+          UPDATE users SET
+            name = COALESCE(${updateName}, name),
+            password_hash = COALESCE(${updatePassword}, password_hash)
+          WHERE id = ${user.id}
+          RETURNING id, name, email, role, region, level, created_at
+        `;
+        return { statusCode: res.length ? 200 : 404, body: JSON.stringify({ data: res[0] || null }) };
+      }
       if (type === 'users' && id) {
         const updateData = { name: body.name, role: body.role, region: body.region || '', level: body.level || null };
         if (body.password && body.password !== '••••••') updateData.password_hash = await bcrypt.hash(body.password, 10);

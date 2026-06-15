@@ -64,7 +64,7 @@ export default function Login() {
             {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
-        <p className="text-xs text-slate-400 text-center mt-6">Prototype Demo • Use your admin/sales credentials</p>
+        <p className="text-xs text-slate-400 text-center mt-6">Use your admin/sales credentials</p>
       </div>
     </div>
   );

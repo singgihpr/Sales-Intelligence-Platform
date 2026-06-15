@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useRegisterSW } from 'virtual:pwa-register/react';
-import { TrendingUp, Users, Store, Menu, Wifi, WifiOff, RefreshCw } from 'lucide-react';
+import { TrendingUp, Users, Store, Wifi, WifiOff, RefreshCw } from 'lucide-react';
 import SalesDashboard from './components/SalesDashboard';
 import SupervisorDashboard from './components/SupervisorDashboard';
 import { OutletListView, OutletDetailView } from './components/OutletViews';
+import ProfileView from './components/ProfileView';
 import InstallPrompt from './components/InstallPrompt';
 
 function usePullToRefresh(enabled = true) {
@@ -110,6 +111,18 @@ export default function App() {
     };
   }, [token, navigate]);
 
+  // Initialize dark mode
+  useEffect(() => {
+    const saved = localStorage.getItem('theme');
+    if (saved === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else if (saved === 'light') {
+      document.documentElement.classList.remove('dark');
+    } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      document.documentElement.classList.add('dark');
+    }
+  }, []);
+
   const fetchDashboard = async () => {
     setLoading(true);
     try {
@@ -192,11 +205,17 @@ export default function App() {
         );
       case 'profile':
         return (
-          <div className="flex flex-col items-center justify-center py-24 text-slate-400 italic">
-            <Menu className="w-12 h-12 mb-4 opacity-20" />
-            <p>Profil & Pengaturan segera hadir.</p>
-            <button onClick={() => { localStorage.removeItem('token'); localStorage.removeItem('user_role'); navigate('/login'); }} className="mt-6 px-4 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-bold">Logout</button>
-          </div>
+          <ProfileView
+            user={dashboardData?.user}
+            role={role}
+            dashboardData={dashboardData}
+            onLogout={() => { localStorage.removeItem('token'); localStorage.removeItem('user_role'); navigate('/login'); }}
+            onProfileUpdate={(updatedUser) => {
+              if (dashboardData && updatedUser) {
+                setDashboardData({ ...dashboardData, user: updatedUser });
+              }
+            }}
+          />
         );
       default:
         return role === 'sales'
