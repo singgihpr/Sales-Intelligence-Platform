@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useRegisterSW } from 'virtual:pwa-register/react';
-import { TrendingUp, Users, Store, Wifi, WifiOff, RefreshCw } from 'lucide-react';
+import { TrendingUp, Users, Store, Wifi, WifiOff, RefreshCw, Settings } from 'lucide-react';
 import SalesDashboard from './components/SalesDashboard';
 import SupervisorDashboard from './components/SupervisorDashboard';
 import { OutletListView, OutletDetailView } from './components/OutletViews';
@@ -262,6 +262,15 @@ export default function App() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {role === 'admin' && (
+              <button
+                onClick={() => navigate('/admin')}
+                className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                title="Admin Panel"
+              >
+                <Settings className="w-4 h-4 text-slate-600 dark:text-slate-300" />
+              </button>
+            )}
             <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-full font-bold uppercase text-slate-500">
               {role}
             </span>
