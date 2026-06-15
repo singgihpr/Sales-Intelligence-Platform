@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Upload, RefreshCw, Edit2, Trash2, Plus, Users, Database, Store, X, LogOut, ArrowLeft, Link2, Target, Award, Download, FileSpreadsheet, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -45,6 +45,7 @@ function PaginationControls({ type, meta, onChange }) {
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState('records');
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
@@ -80,6 +81,14 @@ export default function AdminDashboard() {
 
   const [showAssignForm, setShowAssignForm] = useState(false);
   const [assignForm, setAssignForm] = useState({ outlet_id: '', salesman_id: '', notes: '' });
+
+  // Inline & Bulk Assignment States
+  const [selectedVacantIds, setSelectedVacantIds] = useState([]);
+  const [bulkSalesmanId, setBulkSalesmanId] = useState('');
+  const [inlineAssignments, setInlineAssignments] = useState({});
+  const [assigningOutlets, setAssigningOutlets] = useState(new Set());
+  const [bulkAssigning, setBulkAssigning] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0 });
 
   const [showTargetForm, setShowTargetForm] = useState(false);
   const [targetForm, setTargetForm] = useState({ user_id: '', month: new Date().getMonth()+1, year: new Date().getFullYear(), target_be: 2000 });
@@ -135,6 +144,20 @@ export default function AdminDashboard() {
   useEffect(() => { fetchAll(); fetchAllSalesUsers(); }, []);
   useEffect(() => { if (showVacant) fetchTable('vacant'); }, [showVacant]);
 
+  // Handle navigation state from "Kelola" button
+  useEffect(() => {
+    if (location.state?.activeTab) {
+      setActiveTab(location.state.activeTab);
+    }
+    if (location.state?.showVacant) {
+      setShowVacant(true);
+    }
+    // Clean up location state after reading
+    if (location.state?.activeTab || location.state?.showVacant) {
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
+
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user_role');
@@ -150,6 +173,101 @@ export default function AdminDashboard() {
       resetState();
       setMessage(`✅ ${type.charAt(0).toUpperCase()+type.slice(1)} ${method==='POST'?'created':method==='PUT'?'updated':'deleted'}.`);
     } catch (e) { setMessage(`❌ ${e.message}`); }
+  };
+
+  // Inline assignment for single vacant outlet
+  const handleInlineAssign = async (outletId, salesmanId) => {
+    if (!salesmanId) {
+      setMessage('❌ Please select a salesman first');
+      return;
+    }
+    setAssigningOutlets(prev => new Set(prev).add(outletId));
+    setMessage('');
+    try {
+      const url = `/.netlify/functions/api?type=assignments`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ outlet_id: outletId, salesman_id: salesmanId, notes: '' })
+      });
+      if (!res.ok) throw new Error(await res.text());
+      await fetchTable('vacant');
+      await fetchTable('assignments');
+      setMessage('✅ Outlet assigned successfully');
+      // Remove from selected if it was selected
+      setSelectedVacantIds(prev => prev.filter(id => id !== outletId));
+    } catch (e) {
+      setMessage(`❌ ${e.message}`);
+    } finally {
+      setAssigningOutlets(prev => {
+        const next = new Set(prev);
+        next.delete(outletId);
+        return next;
+      });
+    }
+  };
+
+  // Bulk assignment for multiple vacant outlets
+  const handleBulkAssign = async () => {
+    if (!bulkSalesmanId) {
+      setMessage('❌ Please select a salesman for bulk assignment');
+      return;
+    }
+    if (selectedVacantIds.length === 0) {
+      setMessage('❌ No outlets selected');
+      return;
+    }
+    setBulkAssigning(true);
+    setBulkProgress({ current: 0, total: selectedVacantIds.length });
+    setMessage('');
+    let success = 0;
+    let failed = 0;
+    for (let i = 0; i < selectedVacantIds.length; i++) {
+      const outletId = selectedVacantIds[i];
+      setBulkProgress({ current: i + 1, total: selectedVacantIds.length });
+      try {
+        const url = `/.netlify/functions/api?type=assignments`;
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ outlet_id: outletId, salesman_id: bulkSalesmanId, notes: '' })
+        });
+        if (!res.ok) throw new Error(await res.text());
+        success++;
+      } catch (e) {
+        failed++;
+        console.error(`Failed to assign outlet ${outletId}:`, e);
+      }
+    }
+    await fetchTable('vacant');
+    await fetchTable('assignments');
+    setSelectedVacantIds([]);
+    setBulkSalesmanId('');
+    setBulkAssigning(false);
+    setBulkProgress({ current: 0, total: 0 });
+    if (failed === 0) {
+      setMessage(`✅ ${success} outlets assigned successfully`);
+    } else {
+      setMessage(`⚠️ ${success} assigned, ${failed} failed`);
+    }
+  };
+
+  const toggleSelectVacant = (outletId) => {
+    setSelectedVacantIds(prev =>
+      prev.includes(outletId)
+        ? prev.filter(id => id !== outletId)
+        : [...prev, outletId]
+    );
+  };
+
+  const toggleAllVacant = () => {
+    const currentPageIds = vacantOutlets.map(o => o.id);
+    const allSelected = currentPageIds.every(id => selectedVacantIds.includes(id));
+    if (allSelected) {
+      setSelectedVacantIds(prev => prev.filter(id => !currentPageIds.includes(id)));
+    } else {
+      setSelectedVacantIds(prev => Array.from(new Set([...prev, ...currentPageIds])));
+    }
   };
 
   const handleFileSelect = (e) => {
@@ -480,21 +598,117 @@ export default function AdminDashboard() {
                 <h2 className="text-lg font-bold">Outlet Assignments</h2>
                 <div className="flex gap-2">
                   <button onClick={()=>setShowVacant(!showVacant)} className={`px-3 py-2 rounded-lg text-sm font-medium ${showVacant?'bg-amber-100 text-amber-700':'bg-slate-100 text-slate-600'}`}>{showVacant?'Hide Vacant':'Show Vacant'}</button>
-                  <button onClick={()=>openOutletEdit()} className="flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700"><Plus className="w-4 h-4"/> Assign Outlet</button>
                 </div>
               </div>
               {showVacant && (
                 <div className="mb-6 space-y-3">
                   <h3 className="text-sm font-bold text-amber-700 mb-2">Vacant Outlets (No Salesman Assigned)</h3>
                   <PaginationControls type="vacant" meta={pagination.vacant} onChange={(t, o) => fetchTable(t, o)} />
-                  <div className="overflow-x-auto"><table className="w-full text-sm text-left min-w-[600px]">
-                    <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800"><tr><th className="px-4 py-3">Name</th><th className="px-4 py-3">Branch Area</th><th className="px-4 py-3">Type</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
+
+                  {/* Bulk Assign Bar */}
+                  {selectedVacantIds.length > 0 && (
+                    <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/50 rounded-xl p-4 flex flex-col sm:flex-row items-center gap-3">
+                      <span className="text-sm font-bold text-emerald-800 dark:text-emerald-400">
+                        {selectedVacantIds.length} outlet selected
+                      </span>
+                      <div className="flex-1 w-full sm:w-auto">
+                        <select
+                          value={bulkSalesmanId}
+                          onChange={e => setBulkSalesmanId(e.target.value)}
+                          className="w-full sm:w-auto px-3 py-2 border border-emerald-200 dark:border-emerald-800 rounded-lg bg-white dark:bg-slate-800 text-sm"
+                        >
+                          <option value="">Select Salesman...</option>
+                          {allSalesUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                        </select>
+                      </div>
+                      <button
+                        onClick={handleBulkAssign}
+                        disabled={bulkAssigning}
+                        className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      >
+                        {bulkAssigning ? (
+                          <>
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                            Assigning {bulkProgress.current}/{bulkProgress.total}...
+                          </>
+                        ) : (
+                          <>Assign {selectedVacantIds.length} Outlet{selectedVacantIds.length > 1 ? 's' : ''}</>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => setSelectedVacantIds([])}
+                        className="px-3 py-2 text-slate-500 text-sm hover:text-slate-700"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="overflow-x-auto"><table className="w-full text-sm text-left min-w-[800px]">
+                    <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800"><tr>
+                      <th className="px-4 py-3">
+                        <input
+                          type="checkbox"
+                          checked={vacantOutlets.length > 0 && vacantOutlets.every(o => selectedVacantIds.includes(o.id))}
+                          onChange={toggleAllVacant}
+                          className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                        />
+                      </th>
+                      <th className="px-4 py-3">Name</th>
+                      <th className="px-4 py-3">Branch Area</th>
+                      <th className="px-4 py-3">Type</th>
+                      <th className="px-4 py-3">Salesman</th>
+                      <th className="px-4 py-3 text-right">Quick Assign</th>
+                    </tr></thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                      {vacantOutlets.length === 0 ? <tr><td colSpan="4" className="px-4 py-4 text-center text-slate-400">No vacant outlets.</td></tr> :
-                      vacantOutlets.map(o => (<tr key={o.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                        <td className="px-4 py-3 font-medium">{o.name}</td><td className="px-4 py-3">{o.branch_area||'-'}</td><td className="px-4 py-3">{o.type||'-'}</td>
-                        <td className="px-4 py-3 text-right"><button onClick={()=>{ setAssignForm({ outlet_id: o.id, salesman_id: '', notes: '' }); setShowAssignForm(true); }} className="px-3 py-1.5 bg-emerald-600 text-white rounded-md text-xs font-medium hover:bg-emerald-700">Assign</button></td>
-                      </tr>))}
+                      {vacantOutlets.length === 0 ? <tr><td colSpan="6" className="px-4 py-4 text-center text-slate-400">No vacant outlets.</td></tr> :
+                      vacantOutlets.map(o => {
+                        const isAssigning = assigningOutlets.has(o.id);
+                        const isSelected = selectedVacantIds.includes(o.id);
+                        return (
+                          <tr key={o.id} className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 ${isSelected ? 'bg-emerald-50/50 dark:bg-emerald-950/10' : ''}`}>
+                            <td className="px-4 py-3">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => toggleSelectVacant(o.id)}
+                                className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                              />
+                            </td>
+                            <td className="px-4 py-3 font-medium">{o.name}</td>
+                            <td className="px-4 py-3">{o.branch_area||'-'}</td>
+                            <td className="px-4 py-3">{o.type||'-'}</td>
+                            <td className="px-4 py-3">
+                              <select
+                                value={inlineAssignments[o.id] || ''}
+                                onChange={e => {
+                                  setInlineAssignments(prev => ({ ...prev, [o.id]: e.target.value }));
+                                }}
+                                className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent text-xs"
+                              >
+                                <option value="">Select...</option>
+                                {allSalesUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                              </select>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <button
+                                onClick={() => handleInlineAssign(o.id, inlineAssignments[o.id])}
+                                disabled={isAssigning}
+                                className="px-3 py-1.5 bg-emerald-600 text-white rounded-md text-xs font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 ml-auto"
+                              >
+                                {isAssigning ? (
+                                  <>
+                                    <RefreshCw className="w-3 h-3 animate-spin" />
+                                    Assigning...
+                                  </>
+                                ) : (
+                                  'Assign'
+                                )}
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table></div>
                 </div>
@@ -507,7 +721,7 @@ export default function AdminDashboard() {
                   assignments.length === 0 ? <tr><td colSpan="5" className="px-4 py-8 text-center text-slate-400">No active assignments.</td></tr> :
                   assignments.map(a => (<tr key={a.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                     <td className="px-4 py-3 font-medium">{a.outlet_name}</td><td className="px-4 py-3">{a.branch_area||'-'}</td><td className="px-4 py-3">{a.salesman_name || <span className="text-amber-600 font-bold">Vacant</span>}</td><td className="px-4 py-3 text-slate-500">{a.assigned_at ? new Date(a.assigned_at).toLocaleDateString('id-ID') : '-'}</td>
-                    <td className="px-4 py-3 flex gap-2 justify-end"><button onClick={()=>handleCrud('assignments','PUT',a.id,{},setAssignments,()=>{})} className="p-1.5 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded-lg" title="Unassign"><Link2 className="w-4 h-4"/></button><button onClick={()=>handleCrud('assignments','DELETE',a.id,{},setAssignments,()=>{})} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg"><Trash2 className="w-4 h-4"/></button></td>
+                     <td className="px-4 py-3 flex gap-2 justify-end"><button onClick={()=>handleCrud('assignments','PUT',a.id,{},setAssignments,()=>{})} className="flex items-center gap-1.5 px-3 py-1.5 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded-lg text-xs font-bold" title="Unassign"><Link2 className="w-4 h-4"/>Unassign</button></td>
                   </tr>))}
                 </tbody>
               </table></div>

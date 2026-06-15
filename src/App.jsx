@@ -158,7 +158,7 @@ export default function App() {
 
   const handleNavigate = (target) => {
     if (target === 'assignments') {
-      navigate('/admin');
+      navigate('/admin', { state: { activeTab: 'assignments', showVacant: true } });
     }
   };
 
