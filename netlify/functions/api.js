@@ -918,7 +918,7 @@ const _handler = async (event, context) => {
     // --- GET ---
     if (event.httpMethod === 'GET') {
       const page = Math.max(1, parseInt(params.page) || 1);
-      const limit = Math.min(100, Math.max(1, parseInt(params.limit) || 10));
+      const limit = Math.min(100, Math.max(1, parseInt(params.limit) || 5));
       const offset = (page - 1) * limit;
       const search = (params.search || '').trim();
       const searchPattern = search ? `%${search}%` : '%';
@@ -974,6 +974,33 @@ const _handler = async (event, context) => {
           WHERE (o.name ILIKE ${searchPattern} OR u.name ILIKE ${searchPattern} OR sr.sku_name ILIKE ${searchPattern})
         `;
         return paginateResponse(dataRes, parseInt(countRes[0].cnt));
+      }
+      if (type === 'outlet-history') {
+        const outletId = params.outlet_id;
+        if (!outletId) return { statusCode: 400, body: JSON.stringify({ error: 'outlet_id required' }) };
+
+        // Calculate 3-month date range
+        const now = new Date();
+        const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+        const startDate = `${threeMonthsAgo.getFullYear()}-${String(threeMonthsAgo.getMonth() + 1).padStart(2, '0')}-01`;
+        const endDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+        const historyRes = await sql`
+          SELECT sr.id, sr.record_date::text as date, sr.volume_be as be, sr.sku_name as sku
+          FROM sales_records sr
+          WHERE sr.outlet_id = ${outletId}
+            AND sr.record_date >= ${startDate}
+            AND sr.record_date <= ${endDate}
+          ORDER BY sr.record_date DESC
+          LIMIT ${limit} OFFSET ${offset}
+        `;
+        const countRes = await sql`
+          SELECT COUNT(*) as cnt FROM sales_records sr
+          WHERE sr.outlet_id = ${outletId}
+            AND sr.record_date >= ${startDate}
+            AND sr.record_date <= ${endDate}
+        `;
+        return paginateResponse(historyRes, parseInt(countRes[0].cnt));
       }
       if (type === 'assignments') {
         const mode = params.mode;

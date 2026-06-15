@@ -456,7 +456,20 @@ export default function AdminDashboard() {
           <div className="space-y-6">
             {showAssignForm && (
               <form onSubmit={(e) => { e.preventDefault(); handleCrud('assignments', 'POST', null, assignForm, setAssignments, () => { setShowAssignForm(false); setAssignForm({ outlet_id: '', salesman_id: '', notes: '' }); }); }} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6 grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Outlet</label><select required value={assignForm.outlet_id} onChange={e=>setAssignForm({...assignForm, outlet_id:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800"><option value="" disabled>Select Outlet</option>{outlets.map(o => <option key={o.id} value={o.id}>{o.name} {o.branch_area ? `(${o.branch_area})` : ''}</option>)}</select></div>
+                <div className="md:col-span-1">
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Outlet</label>
+                  <select required value={assignForm.outlet_id} onChange={e=>setAssignForm({...assignForm, outlet_id:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800">
+                    <option value="" disabled>Select Outlet</option>
+                    {(() => {
+                      // Merge outlets + vacantOutlets for dropdown, deduplicate, sort by name
+                      const mergedMap = new Map();
+                      outlets.forEach(o => mergedMap.set(o.id, o));
+                      vacantOutlets.forEach(o => mergedMap.set(o.id, o));
+                      const merged = Array.from(mergedMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+                      return merged.map(o => <option key={o.id} value={o.id}>{o.name} {o.branch_area ? `(${o.branch_area})` : ''}</option>);
+                    })()}
+                  </select>
+                </div>
                 <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Salesman</label><select value={assignForm.salesman_id} onChange={e=>setAssignForm({...assignForm, salesman_id:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800"><option value="">Vacant</option>{allSalesUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}</select></div>
                 <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Notes</label><input value={assignForm.notes} onChange={e=>setAssignForm({...assignForm, notes:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder="Optional notes" /></div>
                 <div className="md:col-span-1 flex gap-2"><button type="submit" className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">Assign</button><button type="button" onClick={()=>setShowAssignForm(false)} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg"><X className="w-4 h-4 mx-auto"/></button></div>

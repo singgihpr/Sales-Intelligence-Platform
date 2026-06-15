@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Search, ArrowLeft, Calendar, MessageSquare, History, MapPin, ChevronRight, Info, X, ChevronLeft, ChevronDown, TrendingUp, TrendingDown, Activity } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Search, ArrowLeft, Calendar, MessageSquare, History, MapPin, ChevronRight, Info, X, ChevronLeft, ChevronDown, TrendingUp, TrendingDown, Activity, RefreshCw } from 'lucide-react';
 
 const OHSInfoModal = ({ open, onClose }) => {
   if (!open) return null;
@@ -92,7 +92,7 @@ export function OutletListView({ outlets, onSelectOutlet }) {
   const [filterOHS, setFilterOHS] = useState('all'); // all, healthy, warning, unhealthy
   const [sortBy, setSortBy] = useState('ohs-desc'); // ohs-desc, ohs-asc, be-desc, name-asc
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+  const itemsPerPage = 5;
 
   // Filter
   let filtered = (outlets || []).filter(o => {
@@ -229,6 +229,35 @@ export function OutletListView({ outlets, onSelectOutlet }) {
 export function OutletDetailView({ outlet, onBack }) {
   const [note, setNote] = useState("");
   const [showInfo, setShowInfo] = useState(false);
+  const [transactionHistory, setTransactionHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState('');
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const HISTORY_LIMIT = 5;
+  
+  useEffect(() => {
+    const fetchHistory = async () => {
+      if (!outlet?.id) return;
+      setHistoryLoading(true);
+      setHistoryError('');
+      try {
+        const token = localStorage.getItem('token');
+        const res = await fetch(`/.netlify/functions/api?type=outlet-history&outlet_id=${outlet.id}&page=${historyPage}&limit=${HISTORY_LIMIT}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!res.ok) throw new Error('Failed to load transaction history');
+        const data = await res.json();
+        setTransactionHistory(data.data || []);
+        setHistoryTotal(data.total || 0);
+      } catch (e) {
+        setHistoryError(e.message);
+      } finally {
+        setHistoryLoading(false);
+      }
+    };
+    fetchHistory();
+  }, [outlet?.id, historyPage]);
   
   const trendPositive = (outlet.trend || 0) >= 0;
   const trendValue = Math.abs(outlet.trend || 0).toFixed(1);
@@ -391,21 +420,67 @@ export function OutletDetailView({ outlet, onBack }) {
 
       {/* Transaction History */}
       <section>
-        <h3 className="font-bold mb-3 flex items-center gap-2 text-sm">
-          <Calendar className="w-4 h-4 text-emerald-600" /> Riwayat Transaksi
-        </h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-bold flex items-center gap-2 text-sm">
+            <Calendar className="w-4 h-4 text-emerald-600" /> Riwayat Transaksi (3 Bulan)
+          </h3>
+          {historyLoading && <RefreshCw className="w-4 h-4 text-slate-400 animate-spin" />}
+        </div>
         <Card className="p-0 overflow-hidden">
-          {(outlet.history || []).length === 0 && <p className="p-4 text-center text-xs text-slate-400">Tidak ada riwayat transaksi 30 hari terakhir</p>}
-          {(outlet.history || []).map((item, idx) => (
-            <div key={idx} className="flex items-center justify-between p-4 border-b last:border-none border-slate-50 dark:border-slate-800">
+          {historyLoading && transactionHistory.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-8 text-slate-400">
+              <div className="w-6 h-6 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-2"></div>
+              <p className="text-xs">Memuat riwayat...</p>
+            </div>
+          )}
+          {historyError && (
+            <div className="p-4 text-center">
+              <p className="text-xs text-red-500 mb-2">{historyError}</p>
+              <button onClick={() => setHistoryPage(1)} className="text-xs text-emerald-600 font-bold">Coba Lagi</button>
+            </div>
+          )}
+          {!historyLoading && !historyError && transactionHistory.length === 0 && (
+            <p className="p-4 text-center text-xs text-slate-400">Tidak ada riwayat transaksi 3 bulan terakhir</p>
+          )}
+          {transactionHistory.map((item, idx) => (
+            <div key={item.id || idx} className="flex items-center justify-between p-4 border-b last:border-none border-slate-50 dark:border-slate-800">
               <div className="flex items-center gap-3">
                 <Calendar className="w-4 h-4 text-slate-300" />
-                <span className="text-sm font-medium">{new Date(item.date).toLocaleDateString('id-ID')}</span>
+                <div>
+                  <span className="text-sm font-medium">{new Date(item.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                  {item.sku && <p className="text-[10px] text-slate-400 mt-0.5">{item.sku}</p>}
+                </div>
               </div>
-              <span className="text-sm font-bold">{item.be} BE</span>
+              <span className="text-sm font-bold">{Number(item.be).toFixed(1)} BE</span>
             </div>
           ))}
         </Card>
+        
+        {/* Pagination */}
+        {historyTotal > HISTORY_LIMIT && (
+          <div className="flex items-center justify-between mt-3">
+            <button
+              onClick={() => setHistoryPage(p => Math.max(1, p - 1))}
+              disabled={historyPage === 1 || historyLoading}
+              className="flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 active:scale-95 transition-all"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" /> Sebelumnya
+            </button>
+            <span className="text-xs font-bold text-slate-500">
+              Hal {historyPage} / {Math.ceil(historyTotal / HISTORY_LIMIT)}
+            </span>
+            <button
+              onClick={() => setHistoryPage(p => Math.min(Math.ceil(historyTotal / HISTORY_LIMIT), p + 1))}
+              disabled={historyPage >= Math.ceil(historyTotal / HISTORY_LIMIT) || historyLoading}
+              className="flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 active:scale-95 transition-all"
+            >
+              Selanjutnya <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+        <p className="text-[10px] text-slate-400 text-center mt-2">
+          {historyTotal} transaksi ditemukan
+        </p>
       </section>
 
       {/* Visit Log */}
