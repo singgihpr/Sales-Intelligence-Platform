@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: salesintel
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: salesintel
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U salesintel"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  app:
+    build: .
+    environment:
+      DATABASE_URL: postgres://salesintel:${DB_PASSWORD}@db:5432/salesintel
+      JWT_SECRET: ${JWT_SECRET}
+      DEFAULT_PASSWORD: ${DEFAULT_PASSWORD}
+      DEFAULT_USER_ID: ${DEFAULT_USER_ID}
+      NODE_ENV: production
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./dist:/usr/share/nginx/html
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      - app
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

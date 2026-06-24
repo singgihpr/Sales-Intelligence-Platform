@@ -20,7 +20,7 @@ export default function SupervisorDashboard({ data, onNavigate }) {
 
   const fetchUsers = async () => {
     try {
-      const res = await fetch('/.netlify/functions/api?type=users&limit=9999&search=', { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch('/api?type=users&limit=9999&search=', { headers: { Authorization: `Bearer ${token}` } });
       const result = await res.json();
       setUsers((result.data || []).filter(u => u.role === 'sales'));
     } catch (e) { console.error(e); }
@@ -38,7 +38,7 @@ export default function SupervisorDashboard({ data, onNavigate }) {
         target_be: Number(form.target_be),
         level: users.find(u => u.id === form.user_id)?.level || 'L2'
       };
-      const res = await fetch('/.netlify/functions/api?type=targets', {
+      const res = await fetch('/api?type=targets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(body)

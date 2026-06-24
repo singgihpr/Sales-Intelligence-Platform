@@ -1,10 +1,6 @@
 import 'dotenv/config';
-import { neon } from '@neondatabase/serverless';
+import { sql } from '../netlify/functions/lib/db.js';
 import bcrypt from 'bcryptjs';
-
-const rawDbUrl = process.env.DATABASE_URL || '';
-const DATABASE_URL = rawDbUrl.replace(/([?&])channel_binding=[^&]*&?/g, '$1').replace(/[?&]$/, '');
-const sql = neon(DATABASE_URL);
 
 async function seed() {
   const email = process.argv[2] || 'admin@example.com';

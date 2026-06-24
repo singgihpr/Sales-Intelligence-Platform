@@ -243,7 +243,7 @@ export function OutletDetailView({ outlet, onBack }) {
       setHistoryError('');
       try {
         const token = localStorage.getItem('token');
-        const res = await fetch(`/.netlify/functions/api?type=outlet-history&outlet_id=${outlet.id}&page=${historyPage}&limit=${HISTORY_LIMIT}`, {
+        const res = await fetch(`/api?type=outlet-history&outlet_id=${outlet.id}&page=${historyPage}&limit=${HISTORY_LIMIT}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         if (!res.ok) throw new Error('Failed to load transaction history');

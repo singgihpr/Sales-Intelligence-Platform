@@ -84,7 +84,7 @@ describe('Login', () => {
 
       await waitFor(() => {
         expect(fetch).toHaveBeenCalledWith(
-          '/.netlify/functions/api?type=auth&action=login',
+          '/api?type=auth&action=login',
           expect.objectContaining({
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
