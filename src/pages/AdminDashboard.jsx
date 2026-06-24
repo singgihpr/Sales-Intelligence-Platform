@@ -109,7 +109,7 @@ export default function AdminDashboard() {
     const search = overrides.search !== undefined ? overrides.search : p.search;
     const isVacant = type === 'vacant';
     const urlType = isVacant ? 'assignments' : type;
-    const url = `/.netlify/functions/api?type=${urlType}${isVacant ? '&mode=vacant' : ''}&page=${page}&limit=${limit}&search=${encodeURIComponent(search)}`;
+    const url = `/api?type=${urlType}${isVacant ? '&mode=vacant' : ''}&page=${page}&limit=${limit}&search=${encodeURIComponent(search)}`;
     try {
       const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
       if (!res.ok) throw new Error(await res.text());
@@ -134,7 +134,7 @@ export default function AdminDashboard() {
 
   const fetchAllSalesUsers = async () => {
     try {
-      const res = await fetch(`/.netlify/functions/api?type=users&limit=9999&search=`, { headers: { 'Authorization': `Bearer ${token}` } });
+      const res = await fetch(`/api?type=users&limit=9999&search=`, { headers: { 'Authorization': `Bearer ${token}` } });
       if (!res.ok) throw new Error(await res.text());
       const result = await res.json();
       setAllSalesUsers((result.data || []).filter(u => u.role === 'sales'));
@@ -166,7 +166,7 @@ export default function AdminDashboard() {
 
   const handleCrud = async (type, method, id, form, setList, resetState) => {
     try {
-      const url = id ? `/.netlify/functions/api?type=${type}&id=${id}` : `/.netlify/functions/api?type=${type}`;
+      const url = id ? `/api?type=${type}&id=${id}` : `/api?type=${type}`;
       const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(form) });
       if (!res.ok) throw new Error(await res.text());
       await fetchTable(type);
@@ -184,7 +184,7 @@ export default function AdminDashboard() {
     setAssigningOutlets(prev => new Set(prev).add(outletId));
     setMessage('');
     try {
-      const url = `/.netlify/functions/api?type=assignments`;
+      const url = `/api?type=assignments`;
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
@@ -226,7 +226,7 @@ export default function AdminDashboard() {
       const outletId = selectedVacantIds[i];
       setBulkProgress({ current: i + 1, total: selectedVacantIds.length });
       try {
-        const url = `/.netlify/functions/api?type=assignments`;
+        const url = `/api?type=assignments`;
         const res = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
@@ -282,7 +282,7 @@ export default function AdminDashboard() {
     setMessage('');
     const fd = new FormData(); fd.append('file', uploadFile);
     try {
-      const res = await fetch('/.netlify/functions/api?action=preview', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: fd });
+      const res = await fetch('/api?action=preview', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: fd });
       if (!res.ok) throw new Error(await res.text());
       const d = await res.json();
       setPreviewData(d);
@@ -298,7 +298,7 @@ export default function AdminDashboard() {
     setMessage('');
     const fd = new FormData(); fd.append('file', uploadFile);
     try {
-      const res = await fetch('/.netlify/functions/api', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: fd });
+      const res = await fetch('/api', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: fd });
       if (!res.ok) throw new Error(res.status);
       const d = await res.json(); setMessage(`✅ Uploaded ${d.inserted} records.`); await fetchTable('records'); setPreviewData(null); setUploadFile(null);
     } catch(e) { setMessage('❌ Upload failed'); }

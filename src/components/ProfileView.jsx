@@ -43,7 +43,7 @@ export default function ProfileView({ role, dashboardData, onLogout, onProfileUp
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch('/.netlify/functions/api?type=profile', {
+      const res = await fetch('/api?type=profile', {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (!res.ok) throw new Error('Failed to load profile');
@@ -84,7 +84,7 @@ export default function ProfileView({ role, dashboardData, onLogout, onProfileUp
     setSavingName(true);
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch('/.netlify/functions/api?type=profile', {
+      const res = await fetch('/api?type=profile', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ name: editName.trim() })
@@ -116,7 +116,7 @@ export default function ProfileView({ role, dashboardData, onLogout, onProfileUp
     setError('');
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch('/.netlify/functions/api?type=profile', {
+      const res = await fetch('/api?type=profile', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ password: passwordForm.new })

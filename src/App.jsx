@@ -126,7 +126,7 @@ export default function App() {
   const fetchDashboard = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/.netlify/functions/api', {
+      const res = await fetch('/api', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) {
