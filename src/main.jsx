@@ -15,10 +15,10 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
   return children;
 };
 
-// Constraint A: Mobile layout wrapper
+// Responsive layout wrapper: mobile card-like, desktop wide centered
 const MobileLayout = ({ children }) => (
   <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex justify-center">
-    <div className="w-full max-w-lg mx-auto p-4 pt-6">{children}</div>
+    <div className="w-full max-w-lg lg:max-w-[1400px] mx-auto p-4 pt-6">{children}</div>
   </div>
 );
 

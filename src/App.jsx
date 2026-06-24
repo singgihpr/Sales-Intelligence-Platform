@@ -246,7 +246,7 @@ export default function App() {
       )}
 
       <nav className="sticky top-0 z-50 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md border-b border-slate-100 dark:border-slate-800 px-4 py-3">
-        <div className="flex items-center justify-between max-w-lg mx-auto">
+        <div className="flex items-center justify-between max-w-lg lg:max-w-[1400px] mx-auto">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center">
               <TrendingUp className="text-white w-5 h-5" />
@@ -278,13 +278,13 @@ export default function App() {
         </div>
       </nav>
 
-      <main className="max-w-lg mx-auto p-4 pt-6">
+      <main className="max-w-lg lg:max-w-[1400px] mx-auto p-4 pt-6">
         {renderContent()}
       </main>
 
       {/* Bottom Tab Bar */}
       <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-950 border-t border-slate-100 dark:border-slate-800 px-6 py-3 safe-area-bottom">
-        <div className="max-w-lg mx-auto flex items-center justify-between">
+        <div className="max-w-lg lg:max-w-[1400px] mx-auto flex items-center justify-between">
           <button
             onClick={() => { setActiveTab('home'); setSelectedOutlet(null); }}
             className={`flex flex-col items-center gap-1 ${activeTab === 'home' ? 'text-emerald-600' : 'text-slate-400'}`}
