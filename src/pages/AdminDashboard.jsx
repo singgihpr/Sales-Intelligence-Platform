@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Upload, RefreshCw, Edit2, Trash2, Plus, Users, Database, Store, X, LogOut, ArrowLeft, Link2, Target, Award, Download, FileSpreadsheet, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Upload, RefreshCw, Edit2, Trash2, Plus, Users, Database, Store, X, LogOut, ArrowLeft, Link2, Target, Award, Download, FileSpreadsheet, Search, ChevronLeft, ChevronRight, UserCheck } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 function PaginationControls({ type, meta, onChange }) {
@@ -56,6 +56,9 @@ export default function AdminDashboard() {
   const [vacantOutlets, setVacantOutlets] = useState([]);
   const [targets, setTargets] = useState([]);
   const [allSalesUsers, setAllSalesUsers] = useState([]);
+  const [supervisors, setSupervisors] = useState([]);
+  const [selectedSupId, setSelectedSupId] = useState('');
+  const [checkedSalesmen, setCheckedSalesmen] = useState([]);
 
   const [pagination, setPagination] = useState({
     records: { page: 1, limit: 10, total: 0, search: '' },
@@ -72,7 +75,7 @@ export default function AdminDashboard() {
   const [showRecForm, setShowRecForm] = useState(false);
 
   const [editingUser, setEditingUser] = useState(null);
-  const [userForm, setUserForm] = useState({ name: '', email: '', role: 'sales', region: '', level: 'L2', password: '' });
+  const [userForm, setUserForm] = useState({ name: '', email: '', role: 'sales', region: '', level: 'L2', password: '', supervisor_id: '' });
   const [showUserForm, setShowUserForm] = useState(false);
 
   const [editingOutlet, setEditingOutlet] = useState(null);
@@ -141,7 +144,16 @@ export default function AdminDashboard() {
     } catch (e) { /* silently ignore to avoid disrupting UI */ }
   };
 
-  useEffect(() => { fetchAll(); fetchAllSalesUsers(); }, []);
+  const fetchAllSupervisors = async () => {
+    try {
+      const res = await fetch(`/api?type=users&limit=9999&search=`, { headers: { 'Authorization': `Bearer ${token}` } });
+      if (!res.ok) throw new Error(await res.text());
+      const result = await res.json();
+      setSupervisors((result.data || []).filter(u => u.role === 'supervisor'));
+    } catch (e) { /* silently ignore */ }
+  };
+
+  useEffect(() => { fetchAll(); fetchAllSalesUsers(); fetchAllSupervisors(); }, []);
   useEffect(() => { if (showVacant) fetchTable('vacant'); }, [showVacant]);
 
   // Handle navigation state from "Kelola" button
@@ -170,6 +182,9 @@ export default function AdminDashboard() {
       const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(form) });
       if (!res.ok) throw new Error(await res.text());
       await fetchTable(type);
+      if (type === 'users') {
+        await Promise.all([fetchAllSupervisors(), fetchAllSalesUsers()]);
+      }
       resetState();
       setMessage(`✅ ${type.charAt(0).toUpperCase()+type.slice(1)} ${method==='POST'?'created':method==='PUT'?'updated':'deleted'}.`);
     } catch (e) { setMessage(`❌ ${e.message}`); }
@@ -300,7 +315,7 @@ export default function AdminDashboard() {
     try {
       const res = await fetch('/api', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: fd });
       if (!res.ok) throw new Error(res.status);
-      const d = await res.json(); setMessage(`✅ Uploaded ${d.inserted} records.`); await fetchTable('records'); setPreviewData(null); setUploadFile(null);
+      const d = await res.json(); setMessage(`✅ Uploaded ${d.inserted} records.${d.assignmentsCreated ? ` ${d.assignmentsCreated} outlets assigned.` : ''}${d.assignmentsUpdated ? ` ${d.assignmentsUpdated} reassigned.` : ''}`); await fetchTable('records'); setPreviewData(null); setUploadFile(null);
     } catch(e) { setMessage('❌ Upload failed'); }
     finally { setUploadLoading(false); }
   };
@@ -335,7 +350,7 @@ export default function AdminDashboard() {
   };
 
   const openRecordEdit = (r = null) => { setEditingRecord(r); setRecForm(r || { outlet: '', sales: '', date: '', be: '', sku: '' }); setShowRecForm(true); };
-  const openUserEdit = (u = null) => { setEditingUser(u); setUserForm(u || { name: '', email: '', role: 'sales', region: '', level: 'L2', password: '' }); setShowUserForm(true); };
+  const openUserEdit = (u = null) => { setEditingUser(u); setUserForm(u || { name: '', email: '', role: 'sales', region: '', level: 'L2', password: '', supervisor_id: '' }); setShowUserForm(true); };
   const openOutletEdit = (o = null) => { setEditingOutlet(o); setOutletForm(o || { name: '', type: '', address: '', contact_person: '', branch_area: '' }); setShowOutletForm(true); };
   const openTargetEdit = (t = null) => {
     setEditingTarget(t);
@@ -348,7 +363,8 @@ export default function AdminDashboard() {
     { id: 'outlets', label: 'Outlet Management', icon: Store },
     { id: 'users', label: 'User Management', icon: Users },
     { id: 'assignments', label: 'Assignments', icon: Link2 },
-    { id: 'targets', label: 'Bonus Targets', icon: Target }
+    { id: 'targets', label: 'Bonus Targets', icon: Target },
+    { id: 'supervisors', label: 'Supervisor Teams', icon: UserCheck }
   ];
 
   const formatRp = (n) => 'Rp ' + (Number(n)||0).toLocaleString('id-ID');
@@ -540,10 +556,11 @@ export default function AdminDashboard() {
         {activeTab === 'users' && (
           <div className="space-y-6">
             {showUserForm && (
-              <form onSubmit={(e) => { e.preventDefault(); handleCrud('users', editingUser ? 'PUT' : 'POST', editingUser?.id, userForm, setUsers, () => setShowUserForm(false)); }} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6 grid grid-cols-1 md:grid-cols-7 gap-4 items-end">
+              <form onSubmit={(e) => { e.preventDefault(); handleCrud('users', editingUser ? 'PUT' : 'POST', editingUser?.id, userForm, setUsers, () => setShowUserForm(false)); }} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6 grid grid-cols-1 md:grid-cols-8 gap-4 items-end">
                 <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Name</label><input required value={userForm.name} onChange={e=>setUserForm({...userForm, name:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder="Full Name" /></div>
                 <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Email</label><input required type="email" value={userForm.email} onChange={e=>setUserForm({...userForm, email:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder="email@domain.com" /></div>
                 <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Role</label><select value={userForm.role} onChange={e=>setUserForm({...userForm, role:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent"><option value="sales">Sales</option><option value="supervisor">Supervisor</option><option value="admin">Admin</option></select></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Supervisor</label><select value={userForm.supervisor_id||''} onChange={e=>setUserForm({...userForm, supervisor_id: e.target.value || null})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent"><option value="">None</option>{supervisors.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
                 <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Level</label><select value={userForm.level||''} onChange={e=>setUserForm({...userForm, level:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent"><option value="">-</option><option value="L2">L2</option><option value="L3">L3</option></select></div>
                 <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Region</label><input value={userForm.region} onChange={e=>setUserForm({...userForm, region:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder="Region" /></div>
                 <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Password</label><input type="password" value={userForm.password} onChange={e=>setUserForm({...userForm, password:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder={editingUser ? "Leave blank to keep current" : "Set initial password"} /></div>
@@ -731,6 +748,135 @@ export default function AdminDashboard() {
                 </tbody>
               </table></div>
             </div>
+          </div>
+        )}
+
+        {activeTab === 'supervisors' && (
+          <div className="space-y-6">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6 space-y-4">
+              <h2 className="text-lg font-bold text-slate-500">Supervisor Teams</h2>
+              <div className="flex flex-col sm:flex-row gap-4 items-end">
+                <div className="w-full sm:w-auto">
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Pilih Supervisor</label>
+                  <select
+                    value={selectedSupId}
+                    onChange={e => { setSelectedSupId(e.target.value); setCheckedSalesmen([]); }}
+                    className="w-full sm:w-72 px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent"
+                  >
+                    <option value="">-- Pilih Supervisor --</option>
+                    {supervisors.map(s => <option key={s.id} value={s.id}>{s.name} {s.region ? `(${s.region})` : ''}</option>)}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {selectedSupId && (
+              <>
+                {/* Assigned Salesmen */}
+                <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6">
+                  <h3 className="text-sm font-bold mb-3">Assigned Salesmen</h3>
+                  {(() => {
+                    const assigned = allSalesUsers.filter(u => u.supervisor_id === selectedSupId);
+                    if (assigned.length === 0) return <p className="text-xs text-slate-400">Belum ada salesmen yang ditugaskan ke supervisor ini.</p>;
+                    return (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm text-left">
+                          <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800"><tr><th className="px-4 py-3">Name</th><th className="px-4 py-3">Level</th><th className="px-4 py-3">Region</th><th className="px-4 py-3 text-right">Action</th></tr></thead>
+                          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                            {assigned.map(u => (
+                              <tr key={u.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                                <td className="px-4 py-3 font-medium">{u.name}</td>
+                                <td className="px-4 py-3">{u.level || '-'}</td>
+                                <td className="px-4 py-3">{u.region || '-'}</td>
+                                <td className="px-4 py-3 text-right">
+                                  <button
+                                    onClick={async () => {
+                                      try {
+                                        const res = await fetch(`/api?type=users&id=${u.id}`, {
+                                          method: 'PUT',
+                                          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                                          body: JSON.stringify({ name: u.name, email: u.email, role: u.role, region: u.region, level: u.level, supervisor_id: null })
+                                        });
+                                        if (!res.ok) throw new Error(await res.text());
+                                        await Promise.all([fetchAllSalesUsers(), fetchAllSupervisors()]);
+                                        setMessage(`✅ ${u.name} unassigned from supervisor`);
+                                      } catch (e) { setMessage(`❌ ${e.message}`); }
+                                    }}
+                                    className="px-3 py-1.5 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded-lg text-xs font-bold"
+                                  >
+                                    Unassign
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* Unassigned Salesmen */}
+                <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6">
+                  <h3 className="text-sm font-bold mb-3">Assign Salesmen to Supervisor</h3>
+                  {(() => {
+                    const unassigned = allSalesUsers.filter(u => !u.supervisor_id || u.supervisor_id !== selectedSupId);
+                    if (unassigned.length === 0) return <p className="text-xs text-slate-400">All salesmen are assigned to this supervisor.</p>;
+                    const selectedSup = supervisors.find(s => s.id === selectedSupId);
+                    return (
+                      <>
+                        <p className="text-xs text-slate-500 mb-3">Pilih salesmen untuk ditugaskan ke <strong>{selectedSup?.name || 'Supervisor'}</strong>:</p>
+                        <div className="space-y-2 max-h-60 overflow-y-auto">
+                          {unassigned.map(u => (
+                            <label key={u.id} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={checkedSalesmen.includes(u.id)}
+                                onChange={() => {
+                                  setCheckedSalesmen(prev =>
+                                    prev.includes(u.id) ? prev.filter(id => id !== u.id) : [...prev, u.id]
+                                  );
+                                }}
+                                className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                              />
+                              <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{u.name}</span>
+                              <span className="text-xs text-slate-400">{u.level || '-'} {u.region ? `• ${u.region}` : ''}</span>
+                            </label>
+                          ))}
+                        </div>
+                        <button
+                          onClick={async () => {
+                            if (checkedSalesmen.length === 0) { setMessage('❌ No salesmen selected'); return; }
+                            setMessage('');
+                            let success = 0, failed = 0;
+                            for (const sid of checkedSalesmen) {
+                              const salesUser = allSalesUsers.find(u => u.id === sid);
+                              if (!salesUser) continue;
+                              try {
+                                const res = await fetch(`/api?type=users&id=${sid}`, {
+                                  method: 'PUT',
+                                  headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                                  body: JSON.stringify({ name: salesUser.name, email: salesUser.email, role: salesUser.role, region: salesUser.region, level: salesUser.level, supervisor_id: selectedSupId })
+                                });
+                                if (!res.ok) throw new Error(await res.text());
+                                success++;
+                              } catch (e) { failed++; }
+                            }
+                            await Promise.all([fetchAllSalesUsers(), fetchAllSupervisors()]);
+                            setCheckedSalesmen([]);
+                            setMessage(success > 0 ? `✅ ${success} assigned, ${failed} failed` : `❌ All failed`);
+                          }}
+                          disabled={checkedSalesmen.length === 0}
+                          className="mt-4 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Assign {checkedSalesmen.length > 0 ? `(${checkedSalesmen.length})` : ''}
+                        </button>
+                      </>
+                    );
+                  })()}
+                </div>
+              </>
+            )}
           </div>
         )}
 

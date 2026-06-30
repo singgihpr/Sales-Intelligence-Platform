@@ -706,19 +706,29 @@ const getUserDashboardData = async (userId) => {
   };
 };
 
-const getSupervisorDashboardData = async (supervisorId) => {
+const getSupervisorDashboardData = async (supervisorId, options = {}) => {
+  const isAdmin = options.isAdmin || false;
   const { month, year, start, end } = getCurrentMonthRange();
 
-  // Get supervisor's region
-  const supRows = await sql`SELECT region FROM users WHERE id = ${supervisorId}`;
-  const region = supRows[0]?.region || '';
+  let teamRows, region;
+  if (isAdmin) {
+    region = '';
+    teamRows = await sql`
+      SELECT id, name, email, role, region, level FROM users
+      WHERE role = 'sales' ORDER BY name
+    `;
+  } else {
+    const supRows = await sql`SELECT region FROM users WHERE id = ${supervisorId}`;
+    region = supRows[0]?.region || '';
+    teamRows = await sql`
+      SELECT id, name, email, role, region, level FROM users
+      WHERE role = 'sales'
+        AND supervisor_id = ${supervisorId} ORDER BY name
+    `;
+  }
 
-  // Team members in same region (all sales + supervisors if needed)
-  const teamRows = await sql`
-    SELECT id, name, email, role, region, level FROM users
-    WHERE role = 'sales' AND (region = ${region} OR ${region} = '')
-    ORDER BY name
-  `;
+  const teamIds = teamRows.map(m => m.id);
+  const salesFilter = isAdmin ? sql`` : sql`AND sr.sales_id = ANY(${teamIds}::uuid[])`;
 
   const teamData = [];
   let totalTeamBE = 0;
@@ -808,7 +818,7 @@ const getSupervisorDashboardData = async (supervisorId) => {
     LEFT JOIN users u ON sr.sales_id = u.id
     WHERE sr.record_date >= ${start} AND sr.record_date <= ${end}
       AND sr.sku_name IS NOT NULL AND sr.sku_name <> ''
-      AND (${region} = '' OR u.region = ${region})
+      ${salesFilter}
     GROUP BY sr.sku_name ORDER BY volume DESC LIMIT 10
   `;
 
@@ -818,7 +828,7 @@ const getSupervisorDashboardData = async (supervisorId) => {
     LEFT JOIN users u ON sr.sales_id = u.id
     WHERE sr.record_date >= ${prevMonthStart} AND sr.record_date <= ${prevMonthEnd}
       AND sr.sku_name IS NOT NULL AND sr.sku_name <> ''
-      AND (${region} = '' OR u.region = ${region})
+      ${salesFilter}
     GROUP BY sr.sku_name
   `;
 
@@ -828,7 +838,7 @@ const getSupervisorDashboardData = async (supervisorId) => {
     LEFT JOIN users u ON sr.sales_id = u.id
     WHERE sr.record_date >= ${lastYearStart} AND sr.record_date <= ${lastYearEnd}
       AND sr.sku_name IS NOT NULL AND sr.sku_name <> ''
-      AND (${region} = '' OR u.region = ${region})
+      ${salesFilter}
     GROUP BY sr.sku_name
   `;
 
@@ -842,7 +852,7 @@ const getSupervisorDashboardData = async (supervisorId) => {
     LEFT JOIN users u ON sr.sales_id = u.id
     WHERE sr.record_date >= ${start} AND sr.record_date <= ${end}
       AND sr.sku_name IS NOT NULL AND sr.sku_name <> ''
-      AND (${region} = '' OR u.region = ${region})
+      ${salesFilter}
     GROUP BY sr.sku_name, o.name
     ORDER BY sr.sku_name, outlet_volume DESC
   `;
@@ -856,7 +866,7 @@ const getSupervisorDashboardData = async (supervisorId) => {
     LEFT JOIN users u ON sr.sales_id = u.id
     WHERE sr.record_date >= ${start} AND sr.record_date <= ${end}
       AND sr.sku_name IS NOT NULL AND sr.sku_name <> ''
-      AND (${region} = '' OR u.region = ${region})
+      ${salesFilter}
     GROUP BY sr.sku_name, EXTRACT(WEEK FROM sr.record_date)
     ORDER BY sr.sku_name, week_num
   `;
@@ -872,7 +882,7 @@ const getSupervisorDashboardData = async (supervisorId) => {
     LEFT JOIN users u ON sr.sales_id = u.id
     WHERE sr.record_date >= ${start} AND sr.record_date <= ${end}
       AND sr.sku_name IS NOT NULL AND sr.sku_name <> ''
-      AND (${region} = '' OR u.region = ${region})
+      ${salesFilter}
     ORDER BY sr.sku_name, sr.record_date DESC
   `;
 
@@ -887,7 +897,7 @@ const getSupervisorDashboardData = async (supervisorId) => {
     LEFT JOIN users u ON sr.sales_id = u.id
     WHERE sr.record_date >= ${prevMonthStart} AND sr.record_date <= ${prevMonthEnd}
       AND sr.sku_name IS NOT NULL AND sr.sku_name <> ''
-      AND (${region} = '' OR u.region = ${region})
+      ${salesFilter}
     ORDER BY sr.sku_name, sr.record_date DESC
   `;
 
@@ -963,7 +973,7 @@ const getSupervisorDashboardData = async (supervisorId) => {
     FROM outlets o
     LEFT JOIN outlet_assignments oa ON oa.outlet_id = o.id AND oa.unassigned_at IS NULL
     LEFT JOIN users u ON oa.salesman_id = u.id
-    LEFT JOIN sales_records sr ON sr.outlet_id = o.id
+    LEFT JOIN sales_records sr ON sr.outlet_id = o.id${isAdmin ? sql`` : sql` AND sr.sales_id = ANY(${teamIds}::uuid[])`}
     GROUP BY o.id, o.name, o.type, o.address, o.contact_person, o.branch_area, u.name
   `;
 
@@ -1040,7 +1050,7 @@ export const handler = async (event) => {
       }
       if (type === 'users') {
         const dataRes = await sql`
-          SELECT id, name, email, role, region, level, created_at FROM users
+          SELECT id, name, email, role, region, level, supervisor_id, created_at FROM users
           WHERE (name ILIKE ${searchPattern} OR email ILIKE ${searchPattern} OR role ILIKE ${searchPattern} OR region ILIKE ${searchPattern})
           ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}
         `;
@@ -1186,7 +1196,7 @@ export const handler = async (event) => {
           return { statusCode: 200, body: JSON.stringify(await getSupervisorDashboardData(user.id)) };
         }
         if (user.role === 'admin') {
-          return { statusCode: 200, body: JSON.stringify(await getSupervisorDashboardData(user.id)) };
+          return { statusCode: 200, body: JSON.stringify(await getSupervisorDashboardData(user.id, { isAdmin: true })) };
         }
       }
       // Fallback old transformToFrontend for backwards compat
@@ -1244,7 +1254,7 @@ export const handler = async (event) => {
           return { statusCode: 400, body: JSON.stringify({ error: 'Password or DEFAULT_PASSWORD env var is required' }) };
         }
         const hash = await bcrypt.hash(plainPw, 10);
-        const res = await sql`INSERT INTO users (id, name, email, role, region, level, password_hash, netlify_uid) VALUES (gen_random_uuid(), ${body.name}, ${body.email}, ${body.role}, ${body.region||''}, ${body.level||null}, ${hash}, gen_random_uuid()::text) RETURNING *`;
+        const res = await sql`INSERT INTO users (id, name, email, role, region, level, supervisor_id, password_hash, netlify_uid) VALUES (gen_random_uuid(), ${body.name}, ${body.email}, ${body.role}, ${body.region||''}, ${body.level||null}, ${body.supervisor_id||null}, ${hash}, gen_random_uuid()::text) RETURNING *`;
         return { statusCode: 201, body: JSON.stringify({ ...res[0], password_hash: '••••••' }) };
       }
       if (type === 'outlets' && isJson) {
@@ -1457,7 +1467,43 @@ export const handler = async (event) => {
                         insertedCount += ids.length;
                       }
                     }
-                    resolve({ statusCode: 200, body: JSON.stringify({ success: true, inserted: insertedCount, totalPreviewed: preview.rows.length, newOutletsCreated: Object.keys(newOutletMap).length }) });
+                    // --- Auto-assign outlets to primary salesman based on file volume ---
+                    let assignmentsCreated = 0, assignmentsUpdated = 0;
+                    const outletVolumeMap = {}; // outletId → { salesId, totalVolume }
+                    for (const r of validRows) {
+                      const outletId = outletIdMap[r.outletName];
+                      const salesId = userIdMap[r.salesName];
+                      if (!outletId || !salesId) continue;
+                      if (!outletVolumeMap[outletId]) outletVolumeMap[outletId] = { salesId, totalVolume: 0 };
+                      outletVolumeMap[outletId].totalVolume += r.volume;
+                      // Keep the salesId with the highest volume
+                      if (outletVolumeMap[outletId].totalVolume < r.volume) {
+                        outletVolumeMap[outletId].salesId = salesId;
+                      }
+                    }
+                    if (Object.keys(outletVolumeMap).length > 0) {
+                      const outletIds = Object.keys(outletVolumeMap);
+                      const existing = await sql`
+                        SELECT oa.outlet_id, oa.salesman_id FROM outlet_assignments oa
+                        WHERE oa.outlet_id = ANY(${outletIds}::uuid[]) AND oa.unassigned_at IS NULL
+                      `;
+                      const existingMap = Object.fromEntries(existing.map(r => [r.outlet_id, r.salesman_id]));
+                      for (const [outletId, info] of Object.entries(outletVolumeMap)) {
+                        const currentSalesmanId = existingMap[outletId];
+                        if (currentSalesmanId !== info.salesId) {
+                          if (currentSalesmanId) {
+                            await sql`UPDATE outlet_assignments SET unassigned_at = CURRENT_TIMESTAMP WHERE outlet_id = ${outletId}::uuid AND unassigned_at IS NULL`;
+                          }
+                          await sql`
+                            INSERT INTO outlet_assignments (id, outlet_id, salesman_id, assigned_by, notes)
+                            VALUES (gen_random_uuid(), ${outletId}::uuid, ${info.salesId}::uuid, ${user?.id || null}, 'Auto-assigned from import')
+                          `;
+                          if (currentSalesmanId) assignmentsUpdated++;
+                          else assignmentsCreated++;
+                        }
+                      }
+                    }
+                    resolve({ statusCode: 200, body: JSON.stringify({ success: true, inserted: insertedCount, totalPreviewed: preview.rows.length, newOutletsCreated: Object.keys(newOutletMap).length, assignmentsCreated, assignmentsUpdated }) });
                   }
                 } else {
                   resolve({ statusCode: 400, body: JSON.stringify({ error: 'Unsupported file format. Please upload Ayotama rincian faktur format (xlsx/xls).' }) });
@@ -1488,10 +1534,18 @@ export const handler = async (event) => {
         return { statusCode: res.length ? 200 : 404, body: JSON.stringify({ data: res[0] || null }) };
       }
       if (type === 'users' && id) {
-        const updateData = { name: body.name, role: body.role, region: body.region || '', level: body.level || null };
-        if (body.password && body.password !== '••••••') updateData.password_hash = await bcrypt.hash(body.password, 10);
-        const res = await sql`UPDATE users SET name=${body.name}, role=${body.role}, region=${body.region||''}, level=${body.level||null}, password_hash=COALESCE(${updateData.password_hash}, password_hash) WHERE id=${id} RETURNING *`;
-        return { statusCode: res.length ? 200 : 404, body: JSON.stringify(res[0] || { error: 'Not found' }) };
+        const pwHash = body.password && body.password !== '••••••' ? await bcrypt.hash(body.password, 10) : null;
+        const res = await sql`
+          UPDATE users SET
+            name = ${body.name},
+            role = ${body.role},
+            region = ${body.region||''},
+            level = ${body.level||null},
+            supervisor_id = ${body.supervisor_id || null},
+            password_hash = COALESCE(${pwHash}, password_hash)
+          WHERE id=${id} RETURNING id, name, email, role, region, level, supervisor_id, created_at
+        `;
+        return { statusCode: res.length ? 200 : 404, body: JSON.stringify({ ...res[0], password_hash: '••••••' } || { error: 'Not found' }) };
       }
       if (type === 'outlets' && id) {
         const res = await sql`UPDATE outlets SET name=${body.name}, type=${body.type||''}, address=${body.address||''}, contact_person=${body.contact_person||''}, branch_area=${body.branch_area||''} WHERE id=${id} RETURNING *`;

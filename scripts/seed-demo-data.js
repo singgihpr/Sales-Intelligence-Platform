@@ -67,6 +67,14 @@ async function seed() {
   const supervisor = createdUsers.find(u => u.role === 'supervisor');
   const salesUsers = createdUsers.filter(u => u.role === 'sales');
 
+  // Assign all salesmen to the supervisor
+  if (supervisor) {
+    for (const s of salesUsers) {
+      await sql`UPDATE users SET supervisor_id = ${supervisor.id} WHERE id = ${s.id}`;
+    }
+    console.log(`   Assigned ${salesUsers.length} salesmen to supervisor ${supervisor.name}`);
+  }
+
   console.log('🌱 Seeding outlets...');
   const createdOutlets = [];
   for (const o of DEMO_OUTLETS) {

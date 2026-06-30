@@ -13,20 +13,11 @@ const Card = ({ children, className = "" }) => (
 export default function SupervisorDashboard({ data, onNavigate }) {
   const { team, teamStats } = data || {};
   const [configPanelOpen, setConfigPanelOpen] = useState(false);
-  const [selectedMember, setSelectedMember] = useState(null);
-  const [users, setUsers] = useState([]);
   const [message, setMessage] = useState('');
   const token = localStorage.getItem('token');
 
-  const fetchUsers = async () => {
-    try {
-      const res = await fetch('/api?type=users&limit=9999&search=', { headers: { Authorization: `Bearer ${token}` } });
-      const result = await res.json();
-      setUsers((result.data || []).filter(u => u.role === 'sales'));
-    } catch (e) { console.error(e); }
-  };
-
-  useEffect(() => { if (configPanelOpen) fetchUsers(); }, [configPanelOpen]);
+  // Use team members directly for target config
+  const teamUsers = (team || []).map(m => ({ id: m.id, name: m.name, level: m.level }));
 
   const handleSaveTarget = async (e, form) => {
     e.preventDefault();
@@ -36,7 +27,7 @@ export default function SupervisorDashboard({ data, onNavigate }) {
         month: Number(form.month),
         year: Number(form.year),
         target_be: Number(form.target_be),
-        level: users.find(u => u.id === form.user_id)?.level || 'L2'
+        level: teamUsers.find(u => u.id === form.user_id)?.level || 'L2'
       };
       const res = await fetch('/api?type=targets', {
         method: 'POST',
@@ -81,8 +72,8 @@ export default function SupervisorDashboard({ data, onNavigate }) {
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-500">{idx + 1}</div>
                 <div>
-                  <p className="text-sm font-bold text-slate-900 dark:text-white">{rep.name}</p>
-                  <p className="text-[10px] text-slate-500 uppercase">{rep.level || 'Sales'} • {rep.totalAssigned} outlets</p>
+                  <p className="text-sm font-bold text-left text-slate-900 dark:text-white">{rep.name}</p>
+                  <p className="text-[10px] text-slate-500 text-left uppercase">{rep.level || 'Sales'} • {rep.totalAssigned} outlets</p>
                 </div>
               </div>
               <div className="text-right">
@@ -109,7 +100,7 @@ export default function SupervisorDashboard({ data, onNavigate }) {
         <Card className="space-y-4">
           {message && <div className={`text-xs font-bold p-2 rounded-lg ${message.includes('✅') ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>{message}</div>}
           <h3 className="font-bold text-slate-900 dark:text-white">Set Target & Bonus</h3>
-          <TargetConfigForm users={users} onSave={handleSaveTarget} />
+          <TargetConfigForm users={teamUsers} onSave={handleSaveTarget} />
         </Card>
       )}
 

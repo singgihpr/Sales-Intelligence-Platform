@@ -194,7 +194,7 @@ export default function App() {
       case 'outlets':
         return <OutletListView outlets={dashboardData?.outlets || []} onSelectOutlet={navigateToOutlet} />;
       case 'team':
-        if (role === 'supervisor') {
+        if (role === 'supervisor' || role === 'admin') {
           return <SupervisorDashboard data={dashboardData} onNavigate={handleNavigate} />;
         }
         return (

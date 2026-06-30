@@ -182,7 +182,7 @@ export function OutletListView({ outlets, onSelectOutlet }) {
                 {outlet.name.charAt(0)}
               </div>
               <div>
-                <h4 className="text-sm font-bold">{outlet.name}</h4>
+                <h4 className="text-sm text-left font-bold">{outlet.name}</h4>
                 <div className="flex items-center gap-2 mt-1 flex-wrap">
                   <HealthBadge score={outlet.health} onClick={() => setShowInfo(true)} />
                   {outlet.branchArea && <span className="text-[10px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded-full">{outlet.branchArea}</span>}

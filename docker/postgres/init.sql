@@ -11,8 +11,10 @@ CREATE TABLE IF NOT EXISTS users (
   level TEXT CHECK (level IN ('L2', 'L3')),
   password_hash TEXT NOT NULL,
   netlify_uid TEXT,
+  supervisor_id UUID REFERENCES users(id) ON DELETE SET NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX IF NOT EXISTS idx_users_supervisor ON users(supervisor_id);
 
 -- 2. Outlets (with Branch Area)
 CREATE TABLE IF NOT EXISTS outlets (
