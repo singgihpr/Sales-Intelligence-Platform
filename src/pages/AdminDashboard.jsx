@@ -446,7 +446,12 @@ export default function AdminDashboard() {
                               <span className="ml-1 text-[9px] font-bold text-amber-600 bg-amber-50 dark:bg-amber-950/30 px-1 py-0.5 rounded-full">NEW</span>
                             )}
                           </td>
-                          <td className="px-3 py-2">{r.salesName || '-'}</td>
+                          <td className="px-3 py-2">
+                            {r.salesName || '-'}
+                            {r.isNewSalesman && (
+                              <span className="ml-1 text-[9px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-950/30 px-1 py-0.5 rounded-full">NEW</span>
+                            )}
+                          </td>
                           <td className="px-3 py-2 font-mono text-xs">{r.date || '-'}</td>
                           <td className="px-3 py-2">{r.volume !== null ? r.volume : '-'}</td>
                           <td className="px-3 py-2 text-slate-500">{r.sku || '-'}</td>

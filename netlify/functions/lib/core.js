@@ -16,7 +16,7 @@ const parseExcelDate = (val) => {
   if (!val) return null;
   if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
   const d = val instanceof Date ? val : new Date(Math.round((val - 25569) * 86400 * 1000));
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
 };
 
 // --- Ayotama Parser Helpers ---
@@ -69,9 +69,14 @@ const fuzzyMatchOutlet = (name, outletsList) => {
 };
 
 const detectFileFormat = (rows) => {
-  // Ayotama format: row[1][1] = 'Rincian Faktur Penjualan'
+  if (rows.length > 4) {
+    const headerRow = rows[4];
+    if (headerRow.some(cell => String(cell).toLowerCase().includes('nama penjual utama'))) {
+      return 'ayotama_v2';
+    }
+  }
   if (rows.length > 1 && String(rows[1]?.[1]).includes('Rincian Faktur')) {
-    return 'ayotama';
+    return 'ayotama_v1';
   }
   return 'unknown';
 };
@@ -172,6 +177,106 @@ const parseAyotamaRows = (rows, allOutlets, allUsers) => {
         sku: productName,
         valid: true,
         isNewOutlet: !currentOutletMatch,
+        warnings
+      });
+    }
+  }
+
+  return {
+    action: 'preview',
+    total: preview.length,
+    valid: preview.filter(p => p.valid).length,
+    invalid: preview.filter(p => !p.valid).length,
+    rows: preview
+  };
+};
+
+const parseAyotamaV2Rows = (rows, allOutlets, allUsers) => {
+  const headerRow = rows[4];
+  if (!headerRow) return { total: 0, valid: 0, invalid: 0, rows: [] };
+
+  const dateColumns = [];
+  for (let i = 7; i < headerRow.length; i++) {
+    const val = headerRow[i];
+    if (val && (typeof val === 'number' || val instanceof Date)) {
+      const dateStr = parseExcelDate(val);
+      if (dateStr) dateColumns.push({ index: i, date: dateStr });
+    }
+  }
+
+  if (dateColumns.length === 0) {
+    return { action: 'preview', total: 0, valid: 0, invalid: 0, rows: [], error: 'No date columns found in header row' };
+  }
+
+  const userNameMap = Object.fromEntries(allUsers.map(u => [String(u.name).toUpperCase().trim(), u]));
+
+  const preview = [];
+  let currentBranch = '';
+  let currentSalesman = '';
+  let currentOutlet = '';
+  let currentOutletMatch = null;
+
+  for (let rowIdx = 5; rowIdx < rows.length; rowIdx++) {
+    const row = rows[rowIdx];
+    if (!row || row.length < 7) continue;
+
+    if (String(row[1]).includes('Halaman')) break;
+
+    const branchCell = String(row[2] || '').trim();
+    if (branchCell && branchCell.match(/^\d{2}\s/)) {
+      currentBranch = branchCell;
+    }
+
+    const salesmanCell = String(row[3] || '').trim();
+    if (salesmanCell) {
+      currentSalesman = salesmanCell;
+    }
+
+    const outletCell = String(row[4] || '').trim();
+    if (outletCell) {
+      currentOutlet = outletCell;
+      currentOutletMatch = fuzzyMatchOutlet(outletCell, allOutlets);
+    }
+
+    const unitType = String(row[5] || '').trim().toUpperCase();
+    const productName = String(row[6] || '').trim();
+
+    if (!productName) continue;
+    if (!['BOX', 'KG', 'PAX', 'PCS', 'KRJ'].includes(unitType)) continue;
+
+    const kg = extractKgFromName(productName);
+    let volumeBE = 0;
+    if (unitType === 'BOX') {
+      volumeBE = convertToBE(1, kg);
+    } else if (unitType === 'KG') {
+      volumeBE = 1 / 12;
+    } else {
+      volumeBE = convertToBE(1, kg);
+    }
+
+    const isKnownSalesman = !!userNameMap[String(currentSalesman).toUpperCase().trim()];
+
+    for (const dc of dateColumns) {
+      const qty = Number(row[dc.index] || 0);
+      if (qty <= 0) continue;
+
+      const totalVolumeBE = Number((qty * volumeBE).toFixed(3));
+      const warnings = [];
+      if (!currentOutlet) warnings.push('Missing outlet name');
+      if (!currentOutletMatch) warnings.push(`Outlet baru akan dibuat: ${currentOutlet}`);
+      if (!dc.date) warnings.push(`Invalid date at col ${dc.index}`);
+
+      preview.push({
+        row: rowIdx + 1,
+        outletName: currentOutletMatch ? currentOutletMatch.name : (currentOutlet || '-'),
+        branchArea: currentBranch || '',
+        salesName: currentSalesman || '-',
+        date: dc.date,
+        volume: totalVolumeBE,
+        sku: productName,
+        valid: true,
+        isNewOutlet: !currentOutletMatch,
+        isNewSalesman: !isKnownSalesman && !!currentSalesman,
         warnings
       });
     }
@@ -1193,33 +1298,105 @@ export const handler = async (event) => {
                 let workbook;
                 if (isCsv) {
                   const csvText = buffer.toString('utf-8');
-                  workbook = xlsx.read(csvText, { type: 'string', cellDates: true });
+                  workbook = xlsx.read(csvText, { type: 'string', cellDates: false });
                 } else {
-                  workbook = xlsx.read(buffer, { cellDates: true });
+                  workbook = xlsx.read(buffer, { cellDates: false });
                 }
                 const sheet = workbook.Sheets[workbook.SheetNames[0]];
                 // Get raw rows for format detection
                 const rawRows = xlsx.utils.sheet_to_json(sheet, { header: 1, raw: true });
                 const fileFormat = detectFileFormat(rawRows);
 
-                if (fileFormat === 'ayotama') {
-                  // Ayotama format parsing
+                if (fileFormat === 'ayotama_v1' || fileFormat === 'ayotama_v2') {
+                  const parser = fileFormat === 'ayotama_v2' ? parseAyotamaV2Rows : parseAyotamaRows;
                   const allOutlets = await sql`SELECT id, name FROM outlets`;
-                  const allUsers = await sql`SELECT id, name, role FROM users`;
+                  let allUsers = await sql`SELECT id, name, role FROM users`;
 
                   if (action === 'preview') {
-                    const result = parseAyotamaRows(rawRows, allOutlets, allUsers);
+                    const result = parser(rawRows, allOutlets, allUsers);
                     resolve({ statusCode: 200, body: JSON.stringify(result) });
                   } else {
-                    // Import Ayotama rows — auto-create missing outlets
-                    const preview = parseAyotamaRows(rawRows, allOutlets, allUsers);
+                    const preview = parser(rawRows, allOutlets, allUsers);
                     const validRows = preview.rows.filter(r => r.valid);
+
+                    // --- Auto-create missing salesmen (v2 only) ---
+                    if (fileFormat === 'ayotama_v2') {
+                      // Deduplicate by normalized name; collect all branches per salesman
+                      const salesmenMap = new Map();
+                      for (const r of validRows.filter(r => r.isNewSalesman)) {
+                        const normalized = String(r.salesName).toUpperCase().trim();
+                        if (!salesmenMap.has(normalized)) {
+                          salesmenMap.set(normalized, { name: r.salesName, branches: new Set() });
+                        }
+                        if (r.branchArea) salesmenMap.get(normalized).branches.add(r.branchArea);
+                      }
+
+                      if (salesmenMap.size > 0) {
+                        // Fetch existing users by normalized name
+                        const existingUsers = await sql`SELECT id, name, email FROM users WHERE role = 'sales'`;
+                        const existingByName = new Map(existingUsers.map(u => [String(u.name).toUpperCase().trim(), u]));
+                        const existingEmails = new Set(existingUsers.map(u => u.email));
+                        const pwHash = DEFAULT_PASSWORD ? await bcrypt.hash(DEFAULT_PASSWORD, 10) : null;
+
+                        for (const sm of salesmenMap.values()) {
+                          const normalized = String(sm.name).toUpperCase().trim();
+
+                          // Skip if name already exists
+                          if (existingByName.has(normalized)) {
+                            const existing = existingByName.get(normalized);
+                            // Ensure all branches are recorded
+                            for (const branch of sm.branches) {
+                              await sql`
+                                INSERT INTO user_branches (id, user_id, branch_name)
+                                VALUES (gen_random_uuid(), ${existing.id}, ${branch})
+                                ON CONFLICT (user_id, branch_name) DO NOTHING
+                              `;
+                            }
+                            continue;
+                          }
+
+                          if (!pwHash) continue;
+
+                          // Generate unique email
+                          const baseSlug = String(sm.name).toLowerCase().replace(/[^a-z0-9]/g, '');
+                          let email = `${baseSlug}@ayotama.com`;
+                          let counter = 1;
+                          while (existingEmails.has(email)) {
+                            email = `${baseSlug}${counter}@ayotama.com`;
+                            counter++;
+                          }
+                          existingEmails.add(email);
+
+                          // Use first branch as primary region
+                          const primaryRegion = [...sm.branches][0] || '';
+
+                          const newUser = await sql`
+                            INSERT INTO users (id, name, email, role, region, level, password_hash, netlify_uid)
+                            VALUES (${randomUUID()}, ${sm.name}, ${email}, 'sales', ${primaryRegion}, 'L2', ${pwHash}, gen_random_uuid()::text)
+                            RETURNING id, name, email
+                          `;
+
+                          // Record all branches
+                          for (const branch of sm.branches) {
+                            await sql`
+                              INSERT INTO user_branches (id, user_id, branch_name)
+                              VALUES (gen_random_uuid(), ${newUser[0].id}, ${branch})
+                              ON CONFLICT (user_id, branch_name) DO NOTHING
+                            `;
+                          }
+
+                          existingByName.set(normalized, newUser[0]);
+                        }
+                      }
+
+                      // Re-fetch users after creating new ones
+                      allUsers = await sql`SELECT id, name, role FROM users`;
+                    }
 
                     // Group new outlets with their branch areas
                     const newOutletMap = {};
                     for (const r of validRows) {
                       if (r.isNewOutlet && r.outletName && r.outletName !== '-') {
-                        // Keep the first (or most common) branch area for this outlet
                         if (!newOutletMap[r.outletName]) {
                           newOutletMap[r.outletName] = r.branchArea || '';
                         }
