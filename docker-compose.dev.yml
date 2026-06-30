@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: salesintel
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-devpassword}
+      POSTGRES_DB: salesintel
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U salesintel"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    volumes:
+      - .:/app
+      - /app/node_modules
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgres://salesintel:${DB_PASSWORD:-devpassword}@db:5432/salesintel
+      JWT_SECRET: ${JWT_SECRET:-dev-secret}
+      DEFAULT_PASSWORD: ${DEFAULT_PASSWORD:-Password123!}
+      DEFAULT_USER_ID: ${DEFAULT_USER_ID:-00000000-0000-0000-0000-000000000000}
+      NODE_ENV: development
+    depends_on:
+      db:
+        condition: service_healthy
+    command: npx nodemon server/index.js --watch server --watch netlify/functions/lib
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    volumes:
+      - .:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    environment:
+      API_PROXY_TARGET: http://api:3000
+    depends_on:
+      - api
+    command: npm run dev
+
+volumes:
+  postgres_dev_data:
+

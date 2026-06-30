@@ -1,6 +1,6 @@
 # Sales Intelligence Platform
 
-A mobile-first sales intelligence dashboard for field teams. Built with **React + Vite**, backed by **Neon PostgreSQL**, and deployed on **Netlify** using **Netlify Functions** (serverless API). Authentication is handled via **custom JWT + bcrypt** — no Netlify Identity required.
+A mobile-first sales intelligence dashboard for field teams. Built with **React + Vite**, backed by **PostgreSQL**, and deployable on **Netlify** (serverless) or your own **VM** (Docker + Nginx). Authentication is handled via **custom JWT + bcrypt** — no Netlify Identity required.
 
 ---
 
@@ -9,10 +9,11 @@ A mobile-first sales intelligence dashboard for field teams. Built with **React 
 | Layer | Technology |
 |-------|-----------|
 | Frontend | React 19, Vite, Tailwind CSS, React Router, PWA-ready |
-| Backend | Netlify Functions (Node.js serverless) |
-| Database | Neon PostgreSQL |
+| Backend | Shared core (Node.js) + Express (VM) / Netlify Functions (serverless) |
+| Database | PostgreSQL — Neon (cloud) or self-hosted via Docker |
 | Auth | Custom JWT (jsonwebtoken) + bcryptjs |
 | Excel Import | xlsx + busboy |
+| VM Infrastructure | Docker, Docker Compose, Nginx, Certbot |
 
 ---
 
@@ -20,166 +21,68 @@ A mobile-first sales intelligence dashboard for field teams. Built with **React 
 
 - **Node.js** 20+
 - **npm**
-- **Neon PostgreSQL** account (free tier works)
-- **Netlify CLI** (for local dev: `npm install -g netlify-cli`)
-- **Netlify account** (for deployment)
+- For **Netlify** deploy: Neon PostgreSQL account (free tier works) + Netlify CLI
+- For **VM** deploy: Docker + Docker Compose
 
 ---
 
-## Database Setup
+## Quick Start (Local Dev)
 
-### 1. Create a Neon Project
-1. Go to [neon.tech](https://neon.tech) and create a new project.
-2. Copy the **connection string** (it looks like `postgresql://...`).
-3. **Important:** Remove `channel_binding=require` from the connection string if present (the Node.js driver has compatibility issues with it).
+### Native (Node.js on host)
 
-### 2. Create Required Tables
-
-Run the following SQL in the Neon SQL Editor:
-
-```sql
-CREATE TABLE IF NOT EXISTS users (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name TEXT NOT NULL,
-  email TEXT UNIQUE NOT NULL,
-  role TEXT NOT NULL CHECK (role IN ('sales', 'supervisor', 'admin')),
-  region TEXT DEFAULT '',
-  level TEXT CHECK (level IN ('L2', 'L3')),
-  password_hash TEXT NOT NULL,
-  netlify_uid TEXT,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS outlets (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name TEXT NOT NULL,
-  type TEXT DEFAULT '',
-  branch_area TEXT DEFAULT '',
-  address TEXT DEFAULT '',
-  contact_person TEXT DEFAULT '',
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS sales_records (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  outlet_id UUID REFERENCES outlets(id),
-  sales_id UUID REFERENCES users(id),
-  record_date DATE NOT NULL,
-  volume_be NUMERIC NOT NULL,
-  sku_name TEXT
-);
-
-CREATE TABLE IF NOT EXISTS outlet_assignments (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  outlet_id UUID NOT NULL REFERENCES outlets(id) ON DELETE CASCADE,
-  salesman_id UUID REFERENCES users(id) ON DELETE SET NULL,
-  assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  unassigned_at TIMESTAMP,
-  assigned_by UUID REFERENCES users(id),
-  notes TEXT DEFAULT ''
-);
-CREATE INDEX IF NOT EXISTS idx_oa_active ON outlet_assignments(unassigned_at) WHERE unassigned_at IS NULL;
-
-CREATE TABLE IF NOT EXISTS targets (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES users(id),
-  month INTEGER NOT NULL,
-  year INTEGER NOT NULL,
-  target_be NUMERIC NOT NULL,
-  incentive_rules JSONB DEFAULT '[]'::jsonb,
-  percentage_config JSONB DEFAULT NULL,
-  volume_config JSONB DEFAULT NULL,
-  active_outlets_config JSONB DEFAULT NULL,
-  UNIQUE(user_id, month, year)
-);
+```bash
+npm install
+npm run build          # Build frontend once
+cp .env.example .env   # Then fill in your values
+npm run server         # Terminal 1 — Express API on :3000
+npm run dev            # Terminal 2 — Vite on :5173
 ```
 
-### 3. Insert Initial Target Data (Optional)
+The Vite dev server proxies `/api` to Express automatically.
 
-The dashboard expects a target for the current month/year for the default user:
+### Docker (everything in containers — hot reload)
 
-```sql
--- Replace user_id with your actual default user's UUID after seeding
-INSERT INTO targets (user_id, month, year, target_be, incentive_rules)
-VALUES (
-  'YOUR_USER_UUID_HERE',
-  EXTRACT(MONTH FROM CURRENT_DATE),
-  EXTRACT(YEAR FROM CURRENT_DATE),
-  1250,
-  '[
-    {"threshold": 90, "reward": 1000000, "label": "Tier 1"},
-    {"threshold": 100, "reward": 2000000, "label": "Tier 2"},
-    {"threshold": 110, "reward": 3500000, "label": "Tier 3"}
-  ]'::jsonb
-);
+```bash
+cp .env.example .env   # Fill in your values
+npm run dev:docker     # Starts Postgres + Express (nodemon) + Vite (HMR)
 ```
+
+- **Frontend:** `http://localhost:5173` — Vite HMR works instantly on file save
+- **Backend:** `http://localhost:3000` — nodemon auto-restarts Express on code changes
+- **Database:** `localhost:5432` — accessible from host for inspection
+
+> **Netlify mode (optional):** `npm run dev:netlify` runs the old Netlify dev server.
 
 ---
 
 ## Environment Variables
 
-Create a `.env` file in the project root:
+Create a `.env` file from the example:
 
-```env
-DATABASE_URL=postgresql://neondb_owner:PASSWORD@ep-xxx-pooler.c-xxx.aws.neon.tech/neondb?sslmode=require
-JWT_SECRET=your-super-secret-jwt-key-min-32-characters-long
-DEFAULT_PASSWORD=<your_default_value>
-DEFAULT_USER_ID=YOUR_DEFAULT_USER_UUID
+```bash
+cp .env.example .env
 ```
 
 | Variable | Description |
 |----------|-------------|
-| `DATABASE_URL` | Neon PostgreSQL connection string |
-| `JWT_SECRET` | Secret key for signing JWT tokens (use a strong random string) |
+| `DATABASE_URL` | PostgreSQL connection string (Neon or local) |
+| `JWT_SECRET` | Secret key for signing JWT tokens (min 32 chars) |
 | `DEFAULT_PASSWORD` | Default password for newly created users |
 | `DEFAULT_USER_ID` | UUID of the default user for dashboard target lookup |
 
-> **Note:** The API automatically strips `channel_binding=require` from the connection string to avoid driver compatibility issues.
+> The API auto-strips `channel_binding=require` from the connection string for driver compatibility.
 
 ---
 
-## Local Development
+## Database Setup
 
-### 1. Install Dependencies
+### Option A: Neon (for Netlify deploy)
+1. Go to [neon.tech](https://neon.tech) and create a project.
+2. Copy the connection string.
+3. Run the schema SQL from `migrations/002_refresh_schema.sql` (or `001_backlog_features.sql` for incremental).
 
-```bash
-npm install
-```
-
-### 2. Seed the First Admin User
-
-```bash
-npm run seed -- admin@example.com YourPassword "Admin Name"
-```
-
-This creates (or updates) an admin user in Neon with a bcrypt-hashed password.
-
-### 3. Start the Netlify Dev Server
-
-Netlify Functions must be served by the Netlify CLI, not Vite alone:
-
-```bash
-# Terminal 1
-npx netlify dev
-```
-
-This starts the function server (usually on `http://localhost:8888`).
-
-### 4. Start the Vite Frontend
-
-```bash
-# Terminal 2
-npm run dev
-```
-
-Vite will proxy API calls to the Netlify dev server automatically (configured in `vite.config.js`).
-
-### 5. Open the App
-
-Go to `http://localhost:5173` (or the port Vite reports).
-
-- Login with your seeded admin credentials
-- The `/admin` route is protected and requires `role === 'admin'`
+### Option B: Local Postgres (for VM dev)
+The Docker Compose setup handles this automatically. See **VM Deployment** below.
 
 ---
 
@@ -188,74 +91,146 @@ Go to `http://localhost:5173` (or the port Vite reports).
 ```
 ├── netlify/
 │   └── functions/
-│       └── api.js          # Serverless API (auth, CRUD, upload)
+│       ├── api.js              # Thin Netlify adapter (~20 lines)
+│       └── lib/
+│           ├── core.js         # Shared business logic (~1300 lines)
+│           ├── db.js           # Auto-detects Neon vs node-postgres
+│           └── multipart.js    # (reserved for future normalization)
+├── server/
+│   └── index.js              # Express entry point for VM deploy
 ├── scripts/
-│   └── seed-admin.js       # Admin user seeder
+│   ├── seed-admin.js         # Admin user seeder
+│   └── seed-demo-data.js     # Full demo dataset seeder
+├── docker/
+│   └── postgres/
+│       └── init.sql          # Schema for fresh VM database
 ├── src/
-│   ├── components/
-│   │   ├── BonusCards.jsx       # Bonus calculation UI cards
-│   │   ├── SalesDashboard.jsx   # Salesman mobile dashboard
-│   │   ├── SupervisorDashboard.jsx  # Supervisor mobile dashboard
-│   │   └── OutletViews.jsx      # Outlet list & detail views
-│   ├── pages/
-│   │   ├── Login.jsx       # Login page with show/hide password
-│   │   └── AdminDashboard.jsx  # Admin panel
-│   ├── App.jsx             # Main app shell with tab navigation
-│   └── main.jsx            # Router + protected routes
-├── .env                    # Environment variables (not committed)
-├── netlify.toml            # Netlify config
-└── vite.config.js          # Vite + PWA config
+│   ├── components/           # Dashboards, outlet views, bonus cards
+│   ├── pages/                # Login, Admin panel
+│   ├── lib/
+│   │   └── api.js            # Unified API base path (/api)
+│   ├── App.jsx               # Main app shell
+│   └── main.jsx              # Router + protected routes
+├── .env.example              # Environment template
+├── docker-compose.yml        # Production VM stack: db + app + nginx
+├── docker-compose.dev.yml    # Development stack with hot reload
+├── Dockerfile                # Production Node.js API container
+├── Dockerfile.dev            # Dev image (Linux node_modules)
+├── nginx.conf                # Reverse proxy + SPA fallback
+├── netlify.toml              # Netlify build + redirect rules
+└── vite.config.js            # Vite + PWA + dev proxy
 ```
 
 ---
 
-## Deployment to Netlify
+## Deployment
 
-### Option A: Deploy via Netlify CLI
+### Option A: VM (Linode / DigitalOcean / AWS EC2)
 
+**VM specs:** 1 CPU, 4 GB RAM (minimum), Ubuntu 22.04/24.04 LTS
+
+**1. Provision the server**
 ```bash
-# Make sure you're logged in
-npx netlify login
-
-# Build and deploy
-npx netlify deploy --prod --build
+# Install Docker + Docker Compose
+sudo apt update && sudo apt install -y docker.io docker-compose-plugin
+sudo usermod -aG docker $USER
 ```
 
-### Option B: Deploy via Git (Recommended)
+**2. Clone & configure**
+```bash
+git clone <repo> /opt/salesintel
+cd /opt/salesintel
+cp .env.example .env
+# Edit .env:
+#   DATABASE_URL=postgres://salesintel:YOUR_PASSWORD@db:5432/salesintel
+#   JWT_SECRET=...
+#   DEFAULT_PASSWORD=...
+#   DEFAULT_USER_ID=...
+```
 
-1. Push your code to a Git provider (GitHub/GitLab/Bitbucket).
-2. In Netlify Dashboard, click **"Add new site" → "Import an existing project"**.
-3. Select your repository.
-4. Configure build settings:
-   - **Build command:** `npm run build`
-   - **Publish directory:** `dist`
-5. Click **Deploy**.
-6. Go to **Site settings → Environment variables** and add:
-   - `DATABASE_URL`
-   - `JWT_SECRET`
-   - `DEFAULT_PASSWORD`
-   - `DEFAULT_USER_ID`
-7. Re-deploy after adding environment variables.
+**3. Build & start**
+```bash
+npm install
+npm run build
+docker compose up -d
+```
 
-### Post-Deployment Setup
+**4. Initialize database & admin**
+```bash
+# Schema is auto-created by docker/postgres/init.sql on first boot.
+# Seed the admin user:
+docker compose exec app node scripts/seed-admin.js admin@yourdomain.com YourPassword "Admin Name"
+```
 
-After the first deploy:
+**5. SSL with Certbot**
+```bash
+sudo apt install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d yourdomain.com
+```
 
-1. **Seed the admin user** locally (it connects directly to Neon, so it works before or after deploy):
-   ```bash
-   npm run seed -- admin@yourcompany.com SecurePassword123 "Super Admin"
-   ```
-2. **Login** at `https://your-site.netlify.app/login`
-3. **Access admin panel** at `/admin`
+> The `nginx.conf` handles HTTPS if certificates are present. See inline comments for cert paths.
+
+---
+
+### Option B: Netlify (Serverless)
+
+**1. Set environment variables** in Netlify Dashboard → Site settings → Environment variables:
+- `DATABASE_URL` (pointing to Neon)
+- `JWT_SECRET`
+- `DEFAULT_PASSWORD`
+- `DEFAULT_USER_ID`
+
+**2. Deploy**
+```bash
+# Via CLI
+npx netlify deploy --prod --build
+
+# Or via Git push (recommended)
+git push origin main
+```
+
+**3. Post-deploy seed**
+```bash
+npm run seed -- admin@yourcompany.com SecurePassword123 "Super Admin"
+```
+
+**How it works:** `netlify.toml` redirects `/api` → `/.netlify/functions/api`, so the frontend's `/api` calls work transparently on both platforms.
+
+---
+
+## How the Hybrid Architecture Works
+
+The app uses a **single shared backend core** that runs on two different hosts:
+
+| Platform | Adapter | Database | Frontend Served By |
+|----------|---------|----------|-------------------|
+| **VM** | Express (`server/index.js`) | Local Postgres (Docker) | Nginx (static `dist/`) |
+| **Netlify** | Netlify Function (`netlify/functions/api.js`) | Neon PostgreSQL | Netlify CDN |
+
+The frontend always calls `/api`. The hosting platform handles routing:
+- **Nginx** proxies `/api` → Express container
+- **Netlify** rewrites `/api` → serverless function
+
+This means **one codebase**, **two deployment targets**, zero frontend changes needed when switching platforms.
+
+---
+
+## Local Development Modes
+
+| Command | Backend | Database | Use Case |
+|---------|---------|----------|----------|
+| `npm run server` + `npm run dev` | Express (:3000) | `.env` DATABASE_URL | **Default** — VM development |
+| `npm run dev:docker` | Express (:3000) + Vite (:5173) | Postgres (Docker) | Full stack in Docker with hot reload |
+| `npm run dev:netlify` | Netlify Dev (:8888) | Neon | Netlify-specific testing |
 
 ---
 
 ## Important Notes
 
-- **No Netlify Identity:** This app does NOT use Netlify Auth/Identity. All authentication is custom JWT + Neon DB.
-- **Neon Connection:** If you see "Illegal arguments: string, object", it means the user's `password_hash` is null or the DB connection failed. The code now handles both gracefully.
-- **CORS:** The API includes CORS headers so it works during local development and on Netlify.
+- **No Netlify Identity:** All authentication is custom JWT + PostgreSQL.
+- **Database abstraction:** `netlify/functions/lib/db.js` auto-detects whether `DATABASE_URL` points to Neon or a local Postgres, so the same queries run on both.
 - **PWA:** The app is PWA-ready via `vite-plugin-pwa`. Icons are expected in `/public/icons/`.
+- **CORS:** Enabled on both Express and Netlify adapters for flexibility.
 
 ---
 
@@ -263,11 +238,13 @@ After the first deploy:
 
 | Problem | Solution |
 |---------|----------|
-| `500` on login | Check that `DATABASE_URL` is set in `.env` and `dotenv` is installed |
-| `Illegal arguments: string, object` | User exists but has no `password_hash`. Run the seed script to fix |
-| `404` on `/.netlify/functions/api` | Make sure you're running `npx netlify dev` alongside Vite |
-| Dashboard shows "No target configured" | Insert a row into the `targets` table for the current month/year |
-| Admin panel is blank / redirects | Check that `user_role` in `localStorage` is `"admin"` and JWT token is valid |
+| `500` on login | Check `DATABASE_URL` is set and accessible from the running process |
+| `Illegal arguments: string, object` | User exists but has no `password_hash`. Run the seed script |
+| `404` on `/api` | Ensure Express is running (`npm run server`) or Netlify dev is active |
+| Dashboard shows "No target configured" | Insert a row into `targets` for the current month/year |
+| Admin panel blank / redirects | Check `user_role` in `localStorage` is `"admin"` and JWT is valid |
+| Netlify build fails with `pg` error | Make sure `pg` is in `dependencies` (not `devDependencies`) |
+| Docker container exits | Check `docker compose logs app` for missing env vars |
 
 ---
 
