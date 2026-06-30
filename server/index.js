@@ -2,9 +2,13 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import { handler as coreHandler } from '../netlify/functions/lib/core.js';
+import { runMigrations } from '../scripts/migrate.js';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Run migrations before starting server
+await runMigrations();
 
 // CORS for all origins (same as Netlify function behavior)
 app.use(cors({

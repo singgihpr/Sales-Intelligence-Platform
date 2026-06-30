@@ -86,6 +86,41 @@ The Docker Compose setup handles this automatically. See **VM Deployment** below
 
 ---
 
+## Database Migrations
+
+Migrations are stored in `migrations/` and run automatically on startup for VM/Docker deployments.
+
+### How It Works
+
+| Environment | Behavior |
+|-------------|----------|
+| **VM / Docker** | `server/index.js` runs safe migrations automatically before starting the API |
+| **Netlify / Neon** | Run `npm run migrate` manually, or execute migration SQL in Neon SQL Editor |
+| **Fresh Docker DB** | `docker/postgres/init.sql` also creates the schema on first initialization |
+
+### Safe vs Destructive Migrations
+
+- **Safe migrations** (e.g., `001_backlog_features.sql`, `003_user_branches.sql`) use `CREATE TABLE IF NOT EXISTS` / `ADD COLUMN IF NOT EXISTS` — they can be run repeatedly without harm.
+- **Destructive migrations** (e.g., `002_refresh_schema.sql` which drops all tables) are **skipped** by the auto-runner.
+
+### Manual Migration
+
+```bash
+# Run all safe migrations
+npm run migrate
+
+# Or run a specific migration manually
+psql $DATABASE_URL -f migrations/003_user_branches.sql
+```
+
+### Creating New Migrations
+
+1. Create a new file: `migrations/004_your_feature.sql`
+2. Use `IF NOT EXISTS` for safety
+3. Avoid `DROP TABLE` unless you explicitly mark it as destructive
+
+---
+
 ## Project Structure
 
 ```

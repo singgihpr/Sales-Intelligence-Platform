@@ -9,6 +9,7 @@
     "dev:docker": "docker compose -f docker-compose.dev.yml up",
     "build": "vite build",
     "server": "node server/index.js",
+    "migrate": "node scripts/migrate.js",
     "lint": "eslint .",
     "preview": "vite preview",
     "seed": "node scripts/seed-admin.js",
