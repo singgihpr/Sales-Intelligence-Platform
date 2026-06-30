@@ -51,6 +51,16 @@ npm run dev:docker     # Starts Postgres + Express (nodemon) + Vite (HMR)
 - **Backend:** `http://localhost:3000` — nodemon auto-restarts Express on code changes
 - **Database:** `localhost:5432` — accessible from host for inspection
 
+**Running scripts in Docker dev:**
+
+```bash
+# Seed admin user
+docker compose -f docker-compose.dev.yml exec api npm run seed -- admin@example.com YourPassword "Admin Name"
+
+# Run migrations manually (also runs automatically on api startup)
+docker compose -f docker-compose.dev.yml exec api npm run migrate
+```
+
 > **Netlify mode (optional):** `npm run dev:netlify` runs the old Netlify dev server.
 
 ---
@@ -106,12 +116,20 @@ Migrations are stored in `migrations/` and run automatically on startup for VM/D
 ### Manual Migration
 
 ```bash
-# Run all safe migrations
+# Run all safe migrations (local dev with localhost database)
 npm run migrate
+
+# Run migrations inside Docker production container
+docker compose exec app npm run migrate
+
+# Run migrations inside Docker dev container
+docker compose -f docker-compose.dev.yml exec api npm run migrate
 
 # Or run a specific migration manually
 psql $DATABASE_URL -f migrations/003_user_branches.sql
 ```
+
+> **Note:** `npm run migrate` on your host machine only works if `DATABASE_URL` points to `localhost`. If you're using Docker and your `.env` points to `@db:5432`, run the migration inside the container instead.
 
 ### Creating New Migrations
 
