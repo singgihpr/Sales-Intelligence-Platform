@@ -722,8 +722,8 @@ const getSupervisorDashboardData = async (supervisorId, options = {}) => {
     region = supRows[0]?.region || '';
     teamRows = await sql`
       SELECT id, name, email, role, region, level FROM users
-      WHERE role = 'sales'
-        AND supervisor_id = ${supervisorId} ORDER BY name
+      WHERE role = 'sales' AND supervisor_id = ${supervisorId}
+      ORDER BY name
     `;
   }
 
