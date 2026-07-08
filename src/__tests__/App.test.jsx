@@ -1,8 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '../test-utils';
 import userEvent from '@testing-library/user-event';
 import App from '../App';
-import { BrowserRouter } from 'react-router-dom';
 
 // Mock fetch
 global.fetch = vi.fn();
@@ -17,11 +16,7 @@ vi.mock('virtual:pwa-register/react', () => ({
 }));
 
 function renderApp() {
-  return render(
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
-  );
+  return render(<App />);
 }
 
 describe('App', () => {

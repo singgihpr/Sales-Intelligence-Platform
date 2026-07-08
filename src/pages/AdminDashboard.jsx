@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useTranslation } from '../lib/i18n.jsx';
 import { Upload, RefreshCw, Edit2, Trash2, Plus, Users, Database, Store, X, LogOut, ArrowLeft, Link2, Target, Award, Download, FileSpreadsheet, Search, ChevronLeft, ChevronRight, UserCheck, Gift } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 function PaginationControls({ type, meta, onChange }) {
+  const { t } = useTranslation();
   const { page, limit, total, search } = meta;
   const totalPages = Math.ceil(total / limit) || 1;
   const start = total === 0 ? 0 : (page - 1) * limit + 1;
@@ -19,7 +21,7 @@ function PaginationControls({ type, meta, onChange }) {
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
         <input
           type="text"
-          placeholder="Cari..."
+          placeholder={t('adminDashboard.pagination.searchPlaceholder')}
           value={search}
           onChange={e => setSearch(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') onChange(type, { page: 1, search }); }}
@@ -27,7 +29,7 @@ function PaginationControls({ type, meta, onChange }) {
         />
       </div>
       <div className="flex items-center gap-3">
-        <span className="text-xs text-slate-500 whitespace-nowrap">{start}-{end} dari {total}</span>
+        <span className="text-xs text-slate-500 whitespace-nowrap">{t('adminDashboard.pagination.range', { start, end, total })}</span>
         <select value={limit} onChange={e => setLimit(e.target.value)} className="text-xs bg-slate-100 dark:bg-slate-800 border-none rounded-lg px-2 py-1.5 focus:ring-2 focus:ring-emerald-500 outline-none">
           <option value={10}>10</option>
           <option value={20}>20</option>
@@ -46,6 +48,7 @@ function PaginationControls({ type, meta, onChange }) {
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { t, dateLocale } = useTranslation();
   const [activeTab, setActiveTab] = useState('records');
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
@@ -134,12 +137,12 @@ export default function AdminDashboard() {
       if (type === 'targets') setTargets(list);
       if (type === 'sku-incentives') setSkuIncentives(list);
       setPagination(prev => ({ ...prev, [type]: { ...prev[type], page, limit, total, search } }));
-    } catch (e) { setMessage(`❌ Fetch ${type} error: ${e.message}`); }
+    } catch (e) { setMessage(t('adminDashboard.messages.fetchError', { type, message: e.message })); }
   };
 
   const fetchAll = async () => {
     setLoading(true);
-    await Promise.all(['records', 'users', 'outlets', 'assignments', 'targets', 'sku-incentives'].map(t => fetchTable(t)));
+    await Promise.all(['records', 'users', 'outlets', 'assignments', 'targets', 'sku-incentives'].map(type => fetchTable(type)));
     setLoading(false);
   };
 
@@ -194,14 +197,14 @@ export default function AdminDashboard() {
         await Promise.all([fetchAllSupervisors(), fetchAllSalesUsers()]);
       }
       resetState();
-      setMessage(`✅ ${type.charAt(0).toUpperCase()+type.slice(1)} ${method==='POST'?'created':method==='PUT'?'updated':'deleted'}.`);
-    } catch (e) { setMessage(`❌ ${e.message}`); }
+      setMessage(t('adminDashboard.messages.crudSuccess', { type, action: t('adminDashboard.crud.' + method) }));
+    } catch (e) { setMessage(t('adminDashboard.messages.error', { message: e.message })); }
   };
 
   // Inline assignment for single vacant outlet
   const handleInlineAssign = async (outletId, salesmanId) => {
     if (!salesmanId) {
-      setMessage('❌ Please select a salesman first');
+      setMessage(t('adminDashboard.messages.selectSalesmanFirst'));
       return;
     }
     setAssigningOutlets(prev => new Set(prev).add(outletId));
@@ -216,11 +219,11 @@ export default function AdminDashboard() {
       if (!res.ok) throw new Error(await res.text());
       await fetchTable('vacant');
       await fetchTable('assignments');
-      setMessage('✅ Outlet assigned successfully');
+      setMessage(t('adminDashboard.messages.outletAssigned'));
       // Remove from selected if it was selected
       setSelectedVacantIds(prev => prev.filter(id => id !== outletId));
     } catch (e) {
-      setMessage(`❌ ${e.message}`);
+      setMessage(t('adminDashboard.messages.error', { message: e.message }));
     } finally {
       setAssigningOutlets(prev => {
         const next = new Set(prev);
@@ -233,11 +236,11 @@ export default function AdminDashboard() {
   // Bulk assignment for multiple vacant outlets
   const handleBulkAssign = async () => {
     if (!bulkSalesmanId) {
-      setMessage('❌ Please select a salesman for bulk assignment');
+      setMessage(t('adminDashboard.messages.selectSalesmanBulk'));
       return;
     }
     if (selectedVacantIds.length === 0) {
-      setMessage('❌ No outlets selected');
+      setMessage(t('adminDashboard.messages.noOutletsSelected'));
       return;
     }
     setBulkAssigning(true);
@@ -269,9 +272,9 @@ export default function AdminDashboard() {
     setBulkAssigning(false);
     setBulkProgress({ current: 0, total: 0 });
     if (failed === 0) {
-      setMessage(`✅ ${success} outlets assigned successfully`);
+      setMessage(t('adminDashboard.messages.assignedSuccess', { success }));
     } else {
-      setMessage(`⚠️ ${success} assigned, ${failed} failed`);
+      setMessage(t('adminDashboard.messages.assignResult', { success, failed }));
     }
   };
 
@@ -300,7 +303,7 @@ export default function AdminDashboard() {
   };
 
   const handlePreview = async () => {
-    if (!uploadFile) { setMessage('❌ Please select a file first'); return; }
+    if (!uploadFile) { setMessage(t('adminDashboard.messages.selectFileFirst')); return; }
     setPreviewLoading(true);
     setMessage('');
     const fd = new FormData(); fd.append('file', uploadFile);
@@ -309,13 +312,13 @@ export default function AdminDashboard() {
       if (!res.ok) throw new Error(await res.text());
       const d = await res.json();
       setPreviewData(d);
-      setMessage(`✅ Preview: ${d.valid} valid, ${d.invalid} invalid out of ${d.total} rows`);
-    } catch (e) { setMessage(`❌ Preview failed: ${e.message}`); }
+      setMessage(t('adminDashboard.messages.previewSummary', { valid: d.valid, invalid: d.invalid, total: d.total }));
+    } catch (e) { setMessage(t('adminDashboard.messages.previewFailed', { message: e.message })); }
     finally { setPreviewLoading(false); }
   };
 
   const handleUpload = async () => {
-    if (!uploadFile) { setMessage('❌ Please select a file first'); return; }
+    if (!uploadFile) { setMessage(t('adminDashboard.messages.selectFileFirst')); return; }
     if (uploadLoading) return;
     setUploadLoading(true);
     setMessage('');
@@ -323,8 +326,8 @@ export default function AdminDashboard() {
     try {
       const res = await fetch('/api', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: fd });
       if (!res.ok) throw new Error(res.status);
-      const d = await res.json(); setMessage(`✅ Uploaded ${d.inserted} records.${d.assignmentsCreated ? ` ${d.assignmentsCreated} outlets assigned.` : ''}${d.assignmentsUpdated ? ` ${d.assignmentsUpdated} reassigned.` : ''}`); await fetchTable('records'); setPreviewData(null); setUploadFile(null);
-    } catch(e) { setMessage('❌ Upload failed'); }
+      const d = await res.json(); setMessage(t('adminDashboard.messages.uploadedRecords', { inserted: d.inserted }) + (d.assignmentsCreated ? ' ' + t('adminDashboard.messages.outletsAssigned', { count: d.assignmentsCreated }) : '') + (d.assignmentsUpdated ? ' ' + t('adminDashboard.messages.reassigned', { count: d.assignmentsUpdated }) : '')); await fetchTable('records'); setPreviewData(null); setUploadFile(null);
+    } catch(e) { setMessage(t('adminDashboard.messages.uploadFailed')); }
     finally { setUploadLoading(false); }
   };
 
@@ -367,16 +370,16 @@ export default function AdminDashboard() {
   };
 
   const tabs = [
-    { id: 'records', label: 'Data Records', icon: Database },
-    { id: 'outlets', label: 'Outlet Management', icon: Store },
-    { id: 'users', label: 'User Management', icon: Users },
-    { id: 'assignments', label: 'Assignments', icon: Link2 },
-    { id: 'targets', label: 'Bonus Targets', icon: Target },
-    { id: 'sku-incentives', label: 'Insentif SKU', icon: Gift },
-    { id: 'supervisors', label: 'Supervisor Teams', icon: UserCheck }
+    { id: 'records', label: t('adminDashboard.tabs.records'), icon: Database },
+    { id: 'outlets', label: t('adminDashboard.tabs.outlets'), icon: Store },
+    { id: 'users', label: t('adminDashboard.tabs.users'), icon: Users },
+    { id: 'assignments', label: t('adminDashboard.tabs.assignments'), icon: Link2 },
+    { id: 'targets', label: t('adminDashboard.tabs.targets'), icon: Target },
+    { id: 'sku-incentives', label: t('adminDashboard.tabs.skuIncentives'), icon: Gift },
+    { id: 'supervisors', label: t('adminDashboard.tabs.supervisors'), icon: UserCheck }
   ];
 
-  const formatRp = (n) => 'Rp ' + (Number(n)||0).toLocaleString('id-ID');
+  const formatRp = (n) => 'Rp ' + (Number(n)||0).toLocaleString(dateLocale);
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
@@ -384,27 +387,27 @@ export default function AdminDashboard() {
       <div className="bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 px-6 lg:px-10 py-4 sticky top-0 z-30">
         <div className="max-w-[1400px] mx-auto flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div className="flex items-center gap-4">
-            <button onClick={()=>navigate('/')} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors" title="Back to Sales Dashboard"><ArrowLeft className="w-5 h-5 text-slate-600 dark:text-slate-400"/></button>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Admin Dashboard</h1>
+            <button onClick={()=>navigate('/')} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors" title={t('adminDashboard.backToSalesDashboard')}><ArrowLeft className="w-5 h-5 text-slate-600 dark:text-slate-400"/></button>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">{t('adminDashboard.title')}</h1>
           </div>
           <div className="flex items-center gap-2 w-full lg:w-auto min-w-0">
             <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg overflow-x-auto flex-1 min-w-0 max-w-full">
-              {tabs.map(t => (
-                <button key={t.id} onClick={() => setActiveTab(t.id)} className={`flex items-center justify-center gap-1.5 px-2 md:px-3 py-2 rounded-md text-xs md:text-sm font-medium transition-all whitespace-nowrap shrink-0 ${activeTab === t.id ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white' : 'text-slate-500 hover:text-slate-700'}`}>
-                  <t.icon className="w-4 h-4 shrink-0" />
-                  <span className="hidden md:inline">{t.label}</span>
+              {tabs.map(tab => (
+                <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex items-center justify-center gap-1.5 px-2 md:px-3 py-2 rounded-md text-xs md:text-sm font-medium transition-all whitespace-nowrap shrink-0 ${activeTab === tab.id ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white' : 'text-slate-500 hover:text-slate-700'}`}>
+                  <tab.icon className="w-4 h-4 shrink-0" />
+                  <span className="hidden md:inline">{tab.label}</span>
                 </button>
               ))}
             </div>
             <button onClick={handleLogout} className="flex items-center gap-1.5 px-2 md:px-3 py-2 bg-red-50 text-red-600 dark:bg-red-950/50 dark:text-red-400 rounded-lg hover:bg-red-100 dark:hover:bg-red-950/80 transition-colors shrink-0 text-xs md:text-sm">
               <LogOut className="w-4 h-4" />
-              <span className="hidden md:inline">Logout</span>
+              <span className="hidden md:inline">{t('adminDashboard.logout')}</span>
             </button>
           </div>
         </div>
       </div>
 
-      {message && <div className="max-w-[1400px] mx-auto px-6 lg:px-10 mt-4"><div className={`p-3 rounded-lg text-sm font-medium ${message.includes('✅') ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400' : 'bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-400'}`}>{message} <button onClick={() => setMessage('')} className="ml-2 underline">Dismiss</button></div></div>}
+      {message && <div className="max-w-[1400px] mx-auto px-6 lg:px-10 mt-4"><div className={`p-3 rounded-lg text-sm font-medium ${message.includes('✅') ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400' : 'bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-400'}`}>{message} <button onClick={() => setMessage('')} className="ml-2 underline">{t('adminDashboard.common.dismiss')}</button></div></div>}
 
       <main className="max-w-[1400px] mx-auto px-6 lg:px-10 py-6">
         {activeTab === 'records' && (
@@ -414,7 +417,7 @@ export default function AdminDashboard() {
                 <input type="file" accept=".csv,.xlsx,.xls" onChange={handleFileSelect} disabled={uploadLoading || previewLoading} className="block w-full sm:w-auto text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 disabled:opacity-50 disabled:cursor-not-allowed" />
                 <div className="flex gap-2 flex-wrap">
                   <button onClick={handlePreview} disabled={!uploadFile || previewLoading} className="px-4 py-2 bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-400 rounded-lg text-sm font-semibold hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed">
-                    {previewLoading ? 'Previewing...' : 'Preview'}
+                    {previewLoading ? t('adminDashboard.records.previewing') : t('adminDashboard.records.preview')}
                   </button>
                   <button onClick={handleUpload} disabled={!uploadFile || uploadLoading || (previewData && previewData.invalid > 0)} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
                     {uploadLoading ? (
@@ -422,18 +425,16 @@ export default function AdminDashboard() {
                         <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        Importing...
-                      </>
-                    ) : 'Import'}
+                        </svg>{t('adminDashboard.records.importing')}</>
+                    ) : t('adminDashboard.records.import')}
                   </button>
                 </div>
               </div>
               <div className="flex flex-col sm:flex-row gap-2 sm:items-center justify-between">
                 <div className="text-xs text-slate-500 space-y-1">
-                  <p><strong>Format yang didukung:</strong> File <code>rincian_faktur_penjualan</code> Ayotama (.xlsx / .xls)</p>
-                  <p>Kolom yang diproses: <code>Cabang</code>, <code>Pelanggan</code>, <code>Barang</code>, <code>Qty harian</code> (per kolom tanggal)</p>
-                  <p>Satuan: <code>BOX</code> (extract KG dari nama → konversi BE), <code>KG</code> (langsung /12), <code>PAX/PCS/KRJ</code> (1 BE per qty)</p>
+                  <p><strong>{t('adminDashboard.records.supportedFormatStrong')}</strong> {t('adminDashboard.records.supportedFormatText')}</p>
+                  <p>{t('adminDashboard.records.columnsProcessed')}</p>
+                  <p>{t('adminDashboard.records.unitRules')}</p>
                 </div>
               </div>
             </div>
@@ -441,24 +442,24 @@ export default function AdminDashboard() {
             {previewData && (
               <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-bold">Preview</h2>
+                  <h2 className="text-lg font-bold">{t('adminDashboard.records.previewTitle')}</h2>
                   <div className="flex items-center gap-3">
-                    <span className="text-xs font-medium text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 px-2 py-1 rounded-full">{previewData.valid} Valid</span>
-                    <span className="text-xs font-medium text-red-600 bg-red-50 dark:bg-red-950/30 px-2 py-1 rounded-full">{previewData.invalid} Invalid</span>
-                    <button onClick={() => setPreviewData(null)} className="text-xs text-slate-400 hover:text-slate-600 underline">Clear</button>
+                    <span className="text-xs font-medium text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 px-2 py-1 rounded-full">{t('adminDashboard.records.validCount', { count: previewData.valid })}</span>
+                    <span className="text-xs font-medium text-red-600 bg-red-50 dark:bg-red-950/30 px-2 py-1 rounded-full">{t('adminDashboard.records.invalidCount', { count: previewData.invalid })}</span>
+                    <button onClick={() => setPreviewData(null)} className="text-xs text-slate-400 hover:text-slate-600 underline">{t('adminDashboard.records.clearPreview')}</button>
                   </div>
                 </div>
                 <div className="overflow-x-auto max-h-80 overflow-y-auto">
                   <table className="w-full text-sm text-left min-w-[700px]">
                     <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800 sticky top-0 z-10">
                       <tr>
-                        <th className="px-3 py-2">Row</th>
-                        <th className="px-3 py-2">Outlet</th>
-                        <th className="px-3 py-2">Sales</th>
-                        <th className="px-3 py-2">Date</th>
-                        <th className="px-3 py-2">Vol BE</th>
-                        <th className="px-3 py-2">SKU</th>
-                        <th className="px-3 py-2">Status</th>
+                        <th className="px-3 py-2">{t('adminDashboard.records.previewHeaders.row')}</th>
+                        <th className="px-3 py-2">{t('adminDashboard.common.outlet')}</th>
+                        <th className="px-3 py-2">{t('adminDashboard.common.sales')}</th>
+                        <th className="px-3 py-2">{t('adminDashboard.common.date')}</th>
+                        <th className="px-3 py-2">{t('adminDashboard.records.previewHeaders.volume')}</th>
+                        <th className="px-3 py-2">{t('adminDashboard.common.sku')}</th>
+                        <th className="px-3 py-2">{t('adminDashboard.common.status')}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -468,13 +469,13 @@ export default function AdminDashboard() {
                           <td className="px-3 py-2">
                             {r.outletName || '-'}
                             {r.isNewOutlet && (
-                              <span className="ml-1 text-[9px] font-bold text-amber-600 bg-amber-50 dark:bg-amber-950/30 px-1 py-0.5 rounded-full">NEW</span>
+                              <span className="ml-1 text-[9px] font-bold text-amber-600 bg-amber-50 dark:bg-amber-950/30 px-1 py-0.5 rounded-full">{t('adminDashboard.records.newBadge')}</span>
                             )}
                           </td>
                           <td className="px-3 py-2">
                             {r.salesName || '-'}
                             {r.isNewSalesman && (
-                              <span className="ml-1 text-[9px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-950/30 px-1 py-0.5 rounded-full">NEW</span>
+                              <span className="ml-1 text-[9px] font-bold text-blue-600 bg-blue-50 dark:bg-blue-950/30 px-1 py-0.5 rounded-full">{t('adminDashboard.records.newBadge')}</span>
                             )}
                           </td>
                           <td className="px-3 py-2 font-mono text-xs">{r.date || '-'}</td>
@@ -483,10 +484,10 @@ export default function AdminDashboard() {
                           <td className="px-3 py-2">
                             {r.warnings && r.warnings.length > 0 ? (
                               <span className="text-[10px] font-bold text-amber-600 bg-amber-50 dark:bg-amber-950/30 px-2 py-0.5 rounded-full" title={r.warnings.join('; ')}>
-                                {r.warnings.length} WARNING{r.warnings.length > 1 ? 'S' : ''}
+                                {r.warnings.length} {t('adminDashboard.records.warning')}{r.warnings.length > 1 ? t('adminDashboard.records.warningPlural') : ''}
                               </span>
                             ) : (
-                              <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 px-2 py-0.5 rounded-full">VALID</span>
+                              <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 px-2 py-0.5 rounded-full">{t('adminDashboard.records.valid')}</span>
                             )}
                           </td>
                         </tr>
@@ -499,26 +500,26 @@ export default function AdminDashboard() {
 
             {showRecForm && (
               <form onSubmit={(e) => { e.preventDefault(); handleCrud('records', editingRecord ? 'PUT' : 'POST', editingRecord?.id, recForm, setRecords, () => setShowRecForm(false)); }} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6 grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Outlet</label><select required value={recForm.outlet} onChange={e=>setRecForm({...recForm, outlet:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800"><option value="" disabled>Select Outlet</option>{outlets.map(o => <option key={o.id} value={o.name}>{o.name}</option>)}</select></div>
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Sales</label><select required value={recForm.sales} onChange={e=>setRecForm({...recForm, sales:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800"><option value="" disabled>Select Sales</option>{users.map(u => <option key={u.id} value={u.name}>{u.name} ({u.role})</option>)}</select></div>
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Date</label><input type="date" required value={recForm.date} onChange={e=>setRecForm({...recForm, date:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" /></div>
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Vol BE</label><input type="number" step="0.1" required value={recForm.be} onChange={e=>setRecForm({...recForm, be:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" /></div>
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">SKU</label><input value={recForm.sku} onChange={e=>setRecForm({...recForm, sku:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder="Optional" /></div>
-                <div className="md:col-span-1 flex gap-2"><button type="submit" className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">Save</button><button type="button" onClick={()=>setShowRecForm(false)} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg text-sm"><X className="w-4 h-4 mx-auto"/></button></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.outlet')}</label><select required value={recForm.outlet} onChange={e=>setRecForm({...recForm, outlet:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800"><option value="" disabled>{t('adminDashboard.records.form.selectOutlet')}</option>{outlets.map(o => <option key={o.id} value={o.name}>{o.name}</option>)}</select></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.sales')}</label><select required value={recForm.sales} onChange={e=>setRecForm({...recForm, sales:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800"><option value="" disabled>{t('adminDashboard.records.form.selectSales')}</option>{users.map(u => <option key={u.id} value={u.name}>{u.name} ({u.role})</option>)}</select></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.date')}</label><input type="date" required value={recForm.date} onChange={e=>setRecForm({...recForm, date:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" /></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.records.previewHeaders.volume')}</label><input type="number" step="0.1" required value={recForm.be} onChange={e=>setRecForm({...recForm, be:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" /></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.sku')}</label><input value={recForm.sku} onChange={e=>setRecForm({...recForm, sku:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder={t('adminDashboard.records.form.optional')} /></div>
+                <div className="md:col-span-1 flex gap-2"><button type="submit" className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">{t('adminDashboard.common.save')}</button><button type="button" onClick={()=>setShowRecForm(false)} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg text-sm"><X className="w-4 h-4 mx-auto"/></button></div>
               </form>
             )}
 
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-bold">Manage Records</h2>
+                <h2 className="text-lg font-bold">{t('adminDashboard.records.title')}</h2>
                 <button onClick={() => fetchTable('records')} disabled={loading} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"><RefreshCw className={`w-4 h-4 ${loading?'animate-spin':''}`}/></button>
               </div>
               <PaginationControls type="records" meta={pagination.records} onChange={(t, o) => fetchTable(t, o)} />
               <div className="overflow-x-auto"><table className="w-full text-sm text-left min-w-[700px]">
-                <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800"><tr><th className="px-4 py-3">Outlet</th><th className="px-4 py-3">Sales</th><th className="px-4 py-3">Date</th><th className="px-4 py-3">SKU</th><th className="px-4 py-3">Vol BE</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
+                <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800"><tr><th className="px-4 py-3">{t('adminDashboard.common.outlet')}</th><th className="px-4 py-3">{t('adminDashboard.common.sales')}</th><th className="px-4 py-3">{t('adminDashboard.common.date')}</th><th className="px-4 py-3">{t('adminDashboard.common.sku')}</th><th className="px-4 py-3">{t('adminDashboard.records.previewHeaders.volume')}</th><th className="px-4 py-3 text-right">{t('adminDashboard.common.actions')}</th></tr></thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {loading ? <tr><td colSpan="6" className="px-4 py-8 text-center text-slate-400 animate-pulse">Loading...</td></tr> :
-                  records.length === 0 ? <tr><td colSpan="6" className="px-4 py-8 text-center text-slate-400">No records. Upload or add manually.</td></tr> :
+                  {loading ? <tr><td colSpan="6" className="px-4 py-8 text-center text-slate-400 animate-pulse">{t('adminDashboard.common.loading')}</td></tr> :
+                  records.length === 0 ? <tr><td colSpan="6" className="px-4 py-8 text-center text-slate-400">{t('adminDashboard.records.empty')}</td></tr> :
                   records.map(r => (<tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                     <td className="px-4 py-3 font-medium">{r.outlet}</td><td className="px-4 py-3">{r.sales}</td><td className="px-4 py-3 font-mono text-xs">{r.date}</td><td className="px-4 py-3 text-slate-500">{r.sku||'-'}</td><td className="px-4 py-3 font-bold text-emerald-600">{parseFloat(r.be).toFixed(1)}</td>
                     <td className="px-4 py-3 flex gap-2 justify-end"><button onClick={()=>openRecordEdit(r)} className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg"><Edit2 className="w-4 h-4"/></button><button onClick={()=>handleCrud('records','DELETE',r.id,{},setRecords,()=>{})} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg"><Trash2 className="w-4 h-4"/></button></td>
@@ -533,25 +534,25 @@ export default function AdminDashboard() {
           <div className="space-y-6">
             {showOutletForm && (
               <form onSubmit={(e) => { e.preventDefault(); handleCrud('outlets', editingOutlet ? 'PUT' : 'POST', editingOutlet?.id, outletForm, setOutlets, () => setShowOutletForm(false)); }} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6 grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Name</label><input required value={outletForm.name} onChange={e=>setOutletForm({...outletForm, name:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder="Outlet Name" /></div>
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Type</label><select value={outletForm.type} onChange={e=>setOutletForm({...outletForm, type:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent"><option value="">Select Type</option><option value="Warung">Warung</option><option value="Supermarket">Supermarket</option><option value="Hotel">Hotel</option><option value="Restaurant">Restaurant</option><option value="Minimarket">Minimarket</option><option value="Other">Other</option></select></div>
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Branch Area</label><input value={outletForm.branch_area} onChange={e=>setOutletForm({...outletForm, branch_area:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder="Jakarta Selatan" /></div>
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Address</label><input value={outletForm.address} onChange={e=>setOutletForm({...outletForm, address:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder="Address" /></div>
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Contact</label><input value={outletForm.contact_person} onChange={e=>setOutletForm({...outletForm, contact_person:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder="Person/Phone" /></div>
-                <div className="md:col-span-1 flex gap-2"><button type="submit" className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">Save</button><button type="button" onClick={()=>setShowOutletForm(false)} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg"><X className="w-4 h-4 mx-auto"/></button></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.name')}</label><input required value={outletForm.name} onChange={e=>setOutletForm({...outletForm, name:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder={t('adminDashboard.outlets.form.namePlaceholder')} /></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.type')}</label><select value={outletForm.type} onChange={e=>setOutletForm({...outletForm, type:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent"><option value="">{t('adminDashboard.outlets.form.typePlaceholder')}</option><option value="Warung">{t('adminDashboard.outlets.types.Warung')}</option><option value="Supermarket">{t('adminDashboard.outlets.types.Supermarket')}</option><option value="Hotel">{t('adminDashboard.outlets.types.Hotel')}</option><option value="Restaurant">{t('adminDashboard.outlets.types.Restaurant')}</option><option value="Minimarket">{t('adminDashboard.outlets.types.Minimarket')}</option><option value="Other">{t('adminDashboard.outlets.types.Other')}</option></select></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.branchArea')}</label><input value={outletForm.branch_area} onChange={e=>setOutletForm({...outletForm, branch_area:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder={t('adminDashboard.outlets.form.branchAreaPlaceholder')} /></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.address')}</label><input value={outletForm.address} onChange={e=>setOutletForm({...outletForm, address:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder={t('adminDashboard.outlets.form.addressPlaceholder')} /></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.contact')}</label><input value={outletForm.contact_person} onChange={e=>setOutletForm({...outletForm, contact_person:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder={t('adminDashboard.outlets.form.contactPlaceholder')} /></div>
+                <div className="md:col-span-1 flex gap-2"><button type="submit" className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">{t('adminDashboard.common.save')}</button><button type="button" onClick={()=>setShowOutletForm(false)} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg"><X className="w-4 h-4 mx-auto"/></button></div>
               </form>
             )}
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-                <h2 className="text-lg font-bold">Outlet Database</h2>
-                <button onClick={()=>openOutletEdit()} className="flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700"><Plus className="w-4 h-4"/> Add Outlet</button>
+                <h2 className="text-lg font-bold">{t('adminDashboard.outlets.title')}</h2>
+                <button onClick={()=>openOutletEdit()} className="flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700"><Plus className="w-4 h-4"/> {t('adminDashboard.outlets.add')}</button>
               </div>
               <PaginationControls type="outlets" meta={pagination.outlets} onChange={(t, o) => fetchTable(t, o)} />
               <div className="overflow-x-auto"><table className="w-full text-sm text-left min-w-[700px]">
-                <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800"><tr><th className="px-4 py-3">Name</th><th className="px-4 py-3">Type</th><th className="px-4 py-3">Branch Area</th><th className="px-4 py-3">Address</th><th className="px-4 py-3">Contact</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
+                <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800"><tr><th className="px-4 py-3">{t('adminDashboard.common.name')}</th><th className="px-4 py-3">{t('adminDashboard.common.type')}</th><th className="px-4 py-3">{t('adminDashboard.common.branchArea')}</th><th className="px-4 py-3">{t('adminDashboard.common.address')}</th><th className="px-4 py-3">{t('adminDashboard.common.contact')}</th><th className="px-4 py-3 text-right">{t('adminDashboard.common.actions')}</th></tr></thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {loading ? <tr><td colSpan="6" className="px-4 py-8 text-center text-slate-400 animate-pulse">Loading...</td></tr> :
-                  outlets.length === 0 ? <tr><td colSpan="6" className="px-4 py-8 text-center text-slate-400">No outlets found.</td></tr> :
+                  {loading ? <tr><td colSpan="6" className="px-4 py-8 text-center text-slate-400 animate-pulse">{t('adminDashboard.common.loading')}</td></tr> :
+                  outlets.length === 0 ? <tr><td colSpan="6" className="px-4 py-8 text-center text-slate-400">{t('adminDashboard.outlets.empty')}</td></tr> :
                   outlets.map(o => (<tr key={o.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                     <td className="px-4 py-3 font-medium">{o.name}</td><td className="px-4 py-3">{o.type||'-'}</td><td className="px-4 py-3">{o.branch_area||'-'}</td><td className="px-4 py-3 text-slate-500">{o.address||'-'}</td><td className="px-4 py-3 text-slate-500">{o.contact_person||'-'}</td>
                     <td className="px-4 py-3 flex gap-2 justify-end"><button onClick={()=>openOutletEdit(o)} className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg"><Edit2 className="w-4 h-4"/></button><button onClick={()=>handleCrud('outlets','DELETE',o.id,{},setOutlets,()=>{})} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg"><Trash2 className="w-4 h-4"/></button></td>
@@ -566,27 +567,27 @@ export default function AdminDashboard() {
           <div className="space-y-6">
             {showUserForm && (
               <form onSubmit={(e) => { e.preventDefault(); handleCrud('users', editingUser ? 'PUT' : 'POST', editingUser?.id, userForm, setUsers, () => setShowUserForm(false)); }} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6 grid grid-cols-1 md:grid-cols-8 gap-4 items-end">
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Name</label><input required value={userForm.name} onChange={e=>setUserForm({...userForm, name:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder="Full Name" /></div>
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Email</label><input required type="email" value={userForm.email} onChange={e=>setUserForm({...userForm, email:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder="email@domain.com" /></div>
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Role</label><select value={userForm.role} onChange={e=>setUserForm({...userForm, role:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent"><option value="sales">Sales</option><option value="supervisor">Supervisor</option><option value="admin">Admin</option></select></div>
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Supervisor</label><select value={userForm.supervisor_id||''} onChange={e=>setUserForm({...userForm, supervisor_id: e.target.value || null})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent"><option value="">None</option>{supervisors.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Level</label><select value={userForm.level||''} onChange={e=>setUserForm({...userForm, level:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent"><option value="">-</option><option value="L2">L2</option><option value="L3">L3</option></select></div>
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Region</label><input value={userForm.region} onChange={e=>setUserForm({...userForm, region:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder="Region" /></div>
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Password</label><input type="password" value={userForm.password} onChange={e=>setUserForm({...userForm, password:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder={editingUser ? "Leave blank to keep current" : "Set initial password"} /></div>
-                <div className="md:col-span-1 flex gap-2"><button type="submit" className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">Save</button><button type="button" onClick={()=>setShowUserForm(false)} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg"><X className="w-4 h-4 mx-auto"/></button></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.name')}</label><input required value={userForm.name} onChange={e=>setUserForm({...userForm, name:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder={t('adminDashboard.users.form.namePlaceholder')} /></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.email')}</label><input required type="email" value={userForm.email} onChange={e=>setUserForm({...userForm, email:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder={t('adminDashboard.users.form.emailPlaceholder')} /></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.role')}</label><select value={userForm.role} onChange={e=>setUserForm({...userForm, role:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent"><option value="sales">{t('adminDashboard.common.sales')}</option><option value="supervisor">{t('adminDashboard.users.roles.supervisor')}</option><option value="admin">{t('adminDashboard.users.roles.admin')}</option></select></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.users.roles.supervisor')}</label><select value={userForm.supervisor_id||''} onChange={e=>setUserForm({...userForm, supervisor_id: e.target.value || null})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent"><option value="">{t('adminDashboard.common.none')}</option>{supervisors.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.level')}</label><select value={userForm.level||''} onChange={e=>setUserForm({...userForm, level:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent"><option value="">-</option><option value="L2">L2</option><option value="L3">L3</option></select></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.region')}</label><input value={userForm.region} onChange={e=>setUserForm({...userForm, region:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder={t('adminDashboard.users.form.regionPlaceholder')} /></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.password')}</label><input type="password" value={userForm.password} onChange={e=>setUserForm({...userForm, password:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder={editingUser ? t('adminDashboard.users.form.passwordKeep') : t('adminDashboard.users.form.passwordInitial')} /></div>
+                <div className="md:col-span-1 flex gap-2"><button type="submit" className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">{t('adminDashboard.common.save')}</button><button type="button" onClick={()=>setShowUserForm(false)} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg"><X className="w-4 h-4 mx-auto"/></button></div>
               </form>
             )}
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-                <h2 className="text-lg font-bold">Team Members</h2>
-                <button onClick={()=>openUserEdit()} className="flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700"><Plus className="w-4 h-4"/> Add User</button>
+                <h2 className="text-lg font-bold">{t('adminDashboard.users.title')}</h2>
+                <button onClick={()=>openUserEdit()} className="flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700"><Plus className="w-4 h-4"/> {t('adminDashboard.users.add')}</button>
               </div>
               <PaginationControls type="users" meta={pagination.users} onChange={(t, o) => fetchTable(t, o)} />
               <div className="overflow-x-auto"><table className="w-full text-sm text-left min-w-[700px]">
-                <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800"><tr><th className="px-4 py-3">Name</th><th className="px-4 py-3">Email</th><th className="px-4 py-3">Role</th><th className="px-4 py-3">Level</th><th className="px-4 py-3">Region</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
+                <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800"><tr><th className="px-4 py-3">{t('adminDashboard.common.name')}</th><th className="px-4 py-3">{t('adminDashboard.common.email')}</th><th className="px-4 py-3">{t('adminDashboard.common.role')}</th><th className="px-4 py-3">{t('adminDashboard.common.level')}</th><th className="px-4 py-3">{t('adminDashboard.common.region')}</th><th className="px-4 py-3 text-right">{t('adminDashboard.common.actions')}</th></tr></thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {loading ? <tr><td colSpan="6" className="px-4 py-8 text-center text-slate-400 animate-pulse">Loading...</td></tr> :
-                  users.length === 0 ? <tr><td colSpan="6" className="px-4 py-8 text-center text-slate-400">No users found.</td></tr> :
+                  {loading ? <tr><td colSpan="6" className="px-4 py-8 text-center text-slate-400 animate-pulse">{t('adminDashboard.common.loading')}</td></tr> :
+                  users.length === 0 ? <tr><td colSpan="6" className="px-4 py-8 text-center text-slate-400">{t('adminDashboard.users.empty')}</td></tr> :
                   users.map(u => (<tr key={u.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                     <td className="px-4 py-3 font-medium">{u.name}</td>
                     <td className="px-4 py-3 text-slate-500">{u.email || '-'}</td>
@@ -606,9 +607,9 @@ export default function AdminDashboard() {
             {showAssignForm && (
               <form onSubmit={(e) => { e.preventDefault(); handleCrud('assignments', 'POST', null, assignForm, setAssignments, () => { setShowAssignForm(false); setAssignForm({ outlet_id: '', salesman_id: '', notes: '' }); }); }} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6 grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                 <div className="md:col-span-1">
-                  <label className="block text-xs font-medium text-slate-500 mb-1">Outlet</label>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.outlet')}</label>
                   <select required value={assignForm.outlet_id} onChange={e=>setAssignForm({...assignForm, outlet_id:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800">
-                    <option value="" disabled>Select Outlet</option>
+                    <option value="" disabled>{t('adminDashboard.records.form.selectOutlet')}</option>
                     {(() => {
                       // Merge outlets + vacantOutlets for dropdown, deduplicate, sort by name
                       const mergedMap = new Map();
@@ -619,36 +620,34 @@ export default function AdminDashboard() {
                     })()}
                   </select>
                 </div>
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Salesman</label><select value={assignForm.salesman_id} onChange={e=>setAssignForm({...assignForm, salesman_id:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800"><option value="">Vacant</option>{allSalesUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}</select></div>
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Notes</label><input value={assignForm.notes} onChange={e=>setAssignForm({...assignForm, notes:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder="Optional notes" /></div>
-                <div className="md:col-span-1 flex gap-2"><button type="submit" className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">Assign</button><button type="button" onClick={()=>setShowAssignForm(false)} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg"><X className="w-4 h-4 mx-auto"/></button></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.salesman')}</label><select value={assignForm.salesman_id} onChange={e=>setAssignForm({...assignForm, salesman_id:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800"><option value="">{t('adminDashboard.assignments.vacantBadge')}</option>{allSalesUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}</select></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.notes')}</label><input value={assignForm.notes} onChange={e=>setAssignForm({...assignForm, notes:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder={t('adminDashboard.assignments.optionalNotes')} /></div>
+                <div className="md:col-span-1 flex gap-2"><button type="submit" className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">{t('adminDashboard.assignments.assign')}</button><button type="button" onClick={()=>setShowAssignForm(false)} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg"><X className="w-4 h-4 mx-auto"/></button></div>
               </form>
             )}
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-                <h2 className="text-lg font-bold">Outlet Assignments</h2>
+                <h2 className="text-lg font-bold">{t('adminDashboard.assignments.title')}</h2>
                 <div className="flex gap-2">
-                  <button onClick={()=>setShowVacant(!showVacant)} className={`px-3 py-2 rounded-lg text-sm font-medium ${showVacant?'bg-amber-100 text-amber-700':'bg-slate-100 text-slate-600'}`}>{showVacant?'Hide Vacant':'Show Vacant'}</button>
+                  <button onClick={()=>setShowVacant(!showVacant)} className={`px-3 py-2 rounded-lg text-sm font-medium ${showVacant?'bg-amber-100 text-amber-700':'bg-slate-100 text-slate-600'}`}>{showVacant?t('adminDashboard.assignments.hideVacant'):t('adminDashboard.assignments.showVacant')}</button>
                 </div>
               </div>
               {showVacant && (
                 <div className="mb-6 space-y-3">
-                  <h3 className="text-sm font-bold text-amber-700 mb-2">Vacant Outlets (No Salesman Assigned)</h3>
+                  <h3 className="text-sm font-bold text-amber-700 mb-2">{t('adminDashboard.assignments.vacantTitle')}</h3>
                   <PaginationControls type="vacant" meta={pagination.vacant} onChange={(t, o) => fetchTable(t, o)} />
 
                   {/* Bulk Assign Bar */}
                   {selectedVacantIds.length > 0 && (
                     <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/50 rounded-xl p-4 flex flex-col sm:flex-row items-center gap-3">
-                      <span className="text-sm font-bold text-emerald-800 dark:text-emerald-400">
-                        {selectedVacantIds.length} outlet selected
-                      </span>
+                      <span className="text-sm font-bold text-emerald-800 dark:text-emerald-400"> {t('adminDashboard.assignments.selectedCount', { count: selectedVacantIds.length })} </span>
                       <div className="flex-1 w-full sm:w-auto">
                         <select
                           value={bulkSalesmanId}
                           onChange={e => setBulkSalesmanId(e.target.value)}
                           className="w-full sm:w-auto px-3 py-2 border border-emerald-200 dark:border-emerald-800 rounded-lg bg-white dark:bg-slate-800 text-sm"
                         >
-                          <option value="">Select Salesman...</option>
+                          <option value="">{t('adminDashboard.assignments.selectSalesman')}</option>
                           {allSalesUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
                         </select>
                       </div>
@@ -660,18 +659,16 @@ export default function AdminDashboard() {
                         {bulkAssigning ? (
                           <>
                             <RefreshCw className="w-4 h-4 animate-spin" />
-                            Assigning {bulkProgress.current}/{bulkProgress.total}...
+                            {t('adminDashboard.assignments.assigningProgress', { current: bulkProgress.current, total: bulkProgress.total })}
                           </>
                         ) : (
-                          <>Assign {selectedVacantIds.length} Outlet{selectedVacantIds.length > 1 ? 's' : ''}</>
+                          selectedVacantIds.length > 1 ? t('adminDashboard.assignments.assignOutlets', { count: selectedVacantIds.length }) : t('adminDashboard.assignments.assignOutlet', { count: selectedVacantIds.length })
                         )}
                       </button>
                       <button
                         onClick={() => setSelectedVacantIds([])}
                         className="px-3 py-2 text-slate-500 text-sm hover:text-slate-700"
-                      >
-                        Clear
-                      </button>
+                      >{t('adminDashboard.assignments.clearSelection')}</button>
                     </div>
                   )}
 
@@ -685,14 +682,14 @@ export default function AdminDashboard() {
                           className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
                         />
                       </th>
-                      <th className="px-4 py-3">Name</th>
-                      <th className="px-4 py-3">Branch Area</th>
-                      <th className="px-4 py-3">Type</th>
-                      <th className="px-4 py-3">Salesman</th>
-                      <th className="px-4 py-3 text-right">Quick Assign</th>
+                      <th className="px-4 py-3">{t('adminDashboard.common.name')}</th>
+                      <th className="px-4 py-3">{t('adminDashboard.common.branchArea')}</th>
+                      <th className="px-4 py-3">{t('adminDashboard.common.type')}</th>
+                      <th className="px-4 py-3">{t('adminDashboard.common.salesman')}</th>
+                      <th className="px-4 py-3 text-right">{t('adminDashboard.assignments.vacantTable.quickAssign')}</th>
                     </tr></thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                      {vacantOutlets.length === 0 ? <tr><td colSpan="6" className="px-4 py-4 text-center text-slate-400">No vacant outlets.</td></tr> :
+                      {vacantOutlets.length === 0 ? <tr><td colSpan="6" className="px-4 py-4 text-center text-slate-400">{t('adminDashboard.assignments.noVacant')}</td></tr> :
                       vacantOutlets.map(o => {
                         const isAssigning = assigningOutlets.has(o.id);
                         const isSelected = selectedVacantIds.includes(o.id);
@@ -717,7 +714,7 @@ export default function AdminDashboard() {
                                 }}
                                 className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent text-xs"
                               >
-                                <option value="">Select...</option>
+                                <option value="">{t('adminDashboard.assignments.inlineSelect')}</option>
                                 {allSalesUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
                               </select>
                             </td>
@@ -729,11 +726,9 @@ export default function AdminDashboard() {
                               >
                                 {isAssigning ? (
                                   <>
-                                    <RefreshCw className="w-3 h-3 animate-spin" />
-                                    Assigning...
-                                  </>
+                                    <RefreshCw className="w-3 h-3 animate-spin" />{t('adminDashboard.assignments.inlineAssigning')}</>
                                 ) : (
-                                  'Assign'
+                                  t('adminDashboard.assignments.assign')
                                 )}
                               </button>
                             </td>
@@ -746,13 +741,13 @@ export default function AdminDashboard() {
               )}
               <PaginationControls type="assignments" meta={pagination.assignments} onChange={(t, o) => fetchTable(t, o)} />
               <div className="overflow-x-auto"><table className="w-full text-sm text-left min-w-[700px]">
-                <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800"><tr><th className="px-4 py-3">Outlet</th><th className="px-4 py-3">Branch Area</th><th className="px-4 py-3">Salesman</th><th className="px-4 py-3">Assigned At</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
+                <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800"><tr><th className="px-4 py-3">{t('adminDashboard.common.outlet')}</th><th className="px-4 py-3">{t('adminDashboard.common.branchArea')}</th><th className="px-4 py-3">{t('adminDashboard.common.salesman')}</th><th className="px-4 py-3">{t('adminDashboard.assignments.activeTable.assignedAt')}</th><th className="px-4 py-3 text-right">{t('adminDashboard.common.actions')}</th></tr></thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {loading ? <tr><td colSpan="5" className="px-4 py-8 text-center text-slate-400 animate-pulse">Loading...</td></tr> :
-                  assignments.length === 0 ? <tr><td colSpan="5" className="px-4 py-8 text-center text-slate-400">No active assignments.</td></tr> :
+                  {loading ? <tr><td colSpan="5" className="px-4 py-8 text-center text-slate-400 animate-pulse">{t('adminDashboard.common.loading')}</td></tr> :
+                  assignments.length === 0 ? <tr><td colSpan="5" className="px-4 py-8 text-center text-slate-400">{t('adminDashboard.assignments.noActive')}</td></tr> :
                   assignments.map(a => (<tr key={a.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                    <td className="px-4 py-3 font-medium">{a.outlet_name}</td><td className="px-4 py-3">{a.branch_area||'-'}</td><td className="px-4 py-3">{a.salesman_name || <span className="text-amber-600 font-bold">Vacant</span>}</td><td className="px-4 py-3 text-slate-500">{a.assigned_at ? new Date(a.assigned_at).toLocaleDateString('id-ID') : '-'}</td>
-                     <td className="px-4 py-3 flex gap-2 justify-end"><button onClick={()=>handleCrud('assignments','PUT',a.id,{},setAssignments,()=>{})} className="flex items-center gap-1.5 px-3 py-1.5 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded-lg text-xs font-bold" title="Unassign"><Link2 className="w-4 h-4"/>Unassign</button></td>
+                    <td className="px-4 py-3 font-medium">{a.outlet_name}</td><td className="px-4 py-3">{a.branch_area||'-'}</td><td className="px-4 py-3">{a.salesman_name || <span className="text-amber-600 font-bold">{t('adminDashboard.assignments.vacantBadge')}</span>}</td><td className="px-4 py-3 text-slate-500">{a.assigned_at ? new Date(a.assigned_at).toLocaleDateString(dateLocale) : '-'}</td>
+                     <td className="px-4 py-3 flex gap-2 justify-end"><button onClick={()=>handleCrud('assignments','PUT',a.id,{},setAssignments,()=>{})} className="flex items-center gap-1.5 px-3 py-1.5 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded-lg text-xs font-bold" title={t('adminDashboard.assignments.unassign')}><Link2 className="w-4 h-4"/>{t('adminDashboard.assignments.unassign')}</button></td>
                   </tr>))}
                 </tbody>
               </table></div>
@@ -763,16 +758,16 @@ export default function AdminDashboard() {
         {activeTab === 'supervisors' && (
           <div className="space-y-6">
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6 space-y-4">
-              <h2 className="text-lg font-bold text-slate-500">Supervisor Teams</h2>
+              <h2 className="text-lg font-bold text-slate-500">{t('adminDashboard.tabs.supervisors')}</h2>
               <div className="flex flex-col sm:flex-row gap-4 items-end">
                 <div className="w-full sm:w-auto">
-                  <label className="block text-xs font-medium text-slate-500 mb-1">Pilih Supervisor</label>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.supervisors.selectSupervisor')}</label>
                   <select
                     value={selectedSupId}
                     onChange={e => { setSelectedSupId(e.target.value); setCheckedSalesmen([]); }}
                     className="w-full sm:w-72 px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent"
                   >
-                    <option value="">-- Pilih Supervisor --</option>
+                    <option value="">{t('adminDashboard.supervisors.selectPlaceholder')}</option>
                     {supervisors.map(s => <option key={s.id} value={s.id}>{s.name} {s.region ? `(${s.region})` : ''}</option>)}
                   </select>
                 </div>
@@ -783,14 +778,14 @@ export default function AdminDashboard() {
               <>
                 {/* Assigned Salesmen */}
                 <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6">
-                  <h3 className="text-sm font-bold mb-3">Assigned Salesmen</h3>
+                  <h3 className="text-sm font-bold mb-3">{t('adminDashboard.supervisors.assignedSalesmen')}</h3>
                   {(() => {
                     const assigned = allSalesUsers.filter(u => u.supervisor_id === selectedSupId);
-                    if (assigned.length === 0) return <p className="text-xs text-slate-400">Belum ada salesmen yang ditugaskan ke supervisor ini.</p>;
+                    if (assigned.length === 0) return <p className="text-xs text-slate-400">{t('adminDashboard.supervisors.noAssigned')}</p>;
                     return (
                       <div className="overflow-x-auto">
                         <table className="w-full text-sm text-left">
-                          <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800"><tr><th className="px-4 py-3">Name</th><th className="px-4 py-3">Level</th><th className="px-4 py-3">Region</th><th className="px-4 py-3 text-right">Action</th></tr></thead>
+                          <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800"><tr><th className="px-4 py-3">{t('adminDashboard.common.name')}</th><th className="px-4 py-3">{t('adminDashboard.common.level')}</th><th className="px-4 py-3">{t('adminDashboard.common.region')}</th><th className="px-4 py-3 text-right">{t('adminDashboard.common.action')}</th></tr></thead>
                           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                             {assigned.map(u => (
                               <tr key={u.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
@@ -808,8 +803,8 @@ export default function AdminDashboard() {
                                         });
                                         if (!res.ok) throw new Error(await res.text());
                                         await Promise.all([fetchAllSalesUsers(), fetchAllSupervisors()]);
-                                        setMessage(`✅ ${u.name} unassigned from supervisor`);
-                                      } catch (e) { setMessage(`❌ ${e.message}`); }
+                                        setMessage(t('adminDashboard.messages.unassignedFromSupervisor', { name: u.name }));
+                                      } catch (e) { setMessage(t('adminDashboard.messages.error', { message: e.message })); }
                                     }}
                                     className="px-3 py-1.5 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded-lg text-xs font-bold"
                                   >
@@ -827,14 +822,14 @@ export default function AdminDashboard() {
 
                 {/* Unassigned Salesmen */}
                 <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6">
-                  <h3 className="text-sm font-bold mb-3">Assign Salesmen to Supervisor</h3>
+                  <h3 className="text-sm font-bold mb-3">{t('adminDashboard.supervisors.assignTitle')}</h3>
                   {(() => {
                     const unassigned = allSalesUsers.filter(u => !u.supervisor_id);
-                    if (unassigned.length === 0) return <p className="text-xs text-slate-400">No unassigned salesmen available.</p>;
+                    if (unassigned.length === 0) return <p className="text-xs text-slate-400">{t('adminDashboard.supervisors.noUnassigned')}</p>;
                     const selectedSup = supervisors.find(s => s.id === selectedSupId);
                     return (
                       <>
-                        <p className="text-xs text-slate-500 mb-3">Pilih salesmen untuk ditugaskan ke <strong>{selectedSup?.name || 'Supervisor'}</strong>:</p>
+                        <p className="text-xs text-slate-500 mb-3">{t('adminDashboard.supervisors.assignHint', { name: selectedSup?.name || t('adminDashboard.supervisors.supervisorFallback') })}</p>
                         <div className="space-y-2 max-h-60 overflow-y-auto">
                           {unassigned.map(u => (
                             <label key={u.id} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer">
@@ -855,7 +850,7 @@ export default function AdminDashboard() {
                         </div>
                         <button
                           onClick={async () => {
-                            if (checkedSalesmen.length === 0) { setMessage('❌ No salesmen selected'); return; }
+                            if (checkedSalesmen.length === 0) { setMessage(t('adminDashboard.messages.noSalesmenSelected')); return; }
                             setMessage('');
                             let success = 0, failed = 0;
                             for (const sid of checkedSalesmen) {
@@ -873,12 +868,12 @@ export default function AdminDashboard() {
                             }
                             await Promise.all([fetchAllSalesUsers(), fetchAllSupervisors()]);
                             setCheckedSalesmen([]);
-                            setMessage(success > 0 ? `✅ ${success} assigned, ${failed} failed` : `❌ All failed`);
+                            setMessage(success > 0 ? t('adminDashboard.messages.assignResult', { success, failed }) : t('adminDashboard.messages.allFailed'));
                           }}
                           disabled={checkedSalesmen.length === 0}
                           className="mt-4 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          Assign {checkedSalesmen.length > 0 ? `(${checkedSalesmen.length})` : ''}
+                          {t('adminDashboard.supervisors.assignButton')} {checkedSalesmen.length > 0 ? `(${checkedSalesmen.length})` : ''}
                         </button>
                       </>
                     );
@@ -897,24 +892,24 @@ export default function AdminDashboard() {
                 const body = { ...targetForm, level: allSalesUsers.find(u => u.id === targetForm.user_id)?.level || 'L2' };
                 handleCrud('targets', editingTarget ? 'PUT' : 'POST', editingTarget?.id, body, setTargets, () => { setShowTargetForm(false); setTargetForm({ user_id: '', month: new Date().getMonth()+1, year: new Date().getFullYear(), target_be: 2000 }); setEditingTarget(null); });
               }} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6 grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Salesman</label><select required value={targetForm.user_id} onChange={e=>setTargetForm({...targetForm, user_id:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800"><option value="" disabled>Select Salesman</option>{allSalesUsers.map(u => <option key={u.id} value={u.id}>{u.name} ({u.level||'-'})</option>)}</select></div>
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Month</label><input type="number" min="1" max="12" required value={targetForm.month} onChange={e=>setTargetForm({...targetForm, month:Number(e.target.value)})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" /></div>
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Year</label><input type="number" min="2024" max="2100" required value={targetForm.year} onChange={e=>setTargetForm({...targetForm, year:Number(e.target.value)})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" /></div>
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Target BE</label><input type="number" step="0.1" required value={targetForm.target_be} onChange={e=>setTargetForm({...targetForm, target_be:Number(e.target.value)})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" /></div>
-                <div className="md:col-span-1 flex gap-2"><button type="submit" className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">Save</button><button type="button" onClick={()=>setShowTargetForm(false)} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg"><X className="w-4 h-4 mx-auto"/></button></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.salesman')}</label><select required value={targetForm.user_id} onChange={e=>setTargetForm({...targetForm, user_id:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800"><option value="" disabled>{t('adminDashboard.targets.form.selectSalesman')}</option>{allSalesUsers.map(u => <option key={u.id} value={u.id}>{u.name} ({u.level||'-'})</option>)}</select></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.month')}</label><input type="number" min="1" max="12" required value={targetForm.month} onChange={e=>setTargetForm({...targetForm, month:Number(e.target.value)})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" /></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.year')}</label><input type="number" min="2024" max="2100" required value={targetForm.year} onChange={e=>setTargetForm({...targetForm, year:Number(e.target.value)})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" /></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.targets.headers.targetBE')}</label><input type="number" step="0.1" required value={targetForm.target_be} onChange={e=>setTargetForm({...targetForm, target_be:Number(e.target.value)})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" /></div>
+                <div className="md:col-span-1 flex gap-2"><button type="submit" className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">{t('adminDashboard.common.save')}</button><button type="button" onClick={()=>setShowTargetForm(false)} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg"><X className="w-4 h-4 mx-auto"/></button></div>
               </form>
             )}
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-                <h2 className="text-lg font-bold">Bonus Targets & Configurations</h2>
-                <button onClick={()=>openTargetEdit()} className="flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700"><Plus className="w-4 h-4"/> Add Target</button>
+                <h2 className="text-lg font-bold">{t('adminDashboard.targets.title')}</h2>
+                <button onClick={()=>openTargetEdit()} className="flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700"><Plus className="w-4 h-4"/> {t('adminDashboard.targets.add')}</button>
               </div>
               <PaginationControls type="targets" meta={pagination.targets} onChange={(t, o) => fetchTable(t, o)} />
               <div className="overflow-x-auto"><table className="w-full text-sm text-left min-w-[700px]">
-                <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800"><tr><th className="px-4 py-3">Salesman</th><th className="px-4 py-3">Month</th><th className="px-4 py-3">Year</th><th className="px-4 py-3">Target BE</th><th className="px-4 py-3">Percentage</th><th className="px-4 py-3">Volume</th><th className="px-4 py-3">Active Outlets</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
+                <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800"><tr><th className="px-4 py-3">{t('adminDashboard.common.salesman')}</th><th className="px-4 py-3">{t('adminDashboard.common.month')}</th><th className="px-4 py-3">{t('adminDashboard.common.year')}</th><th className="px-4 py-3">{t('adminDashboard.targets.headers.targetBE')}</th><th className="px-4 py-3">{t('adminDashboard.targets.headers.percentage')}</th><th className="px-4 py-3">{t('adminDashboard.targets.headers.volume')}</th><th className="px-4 py-3">{t('adminDashboard.targets.headers.activeOutlets')}</th><th className="px-4 py-3 text-right">{t('adminDashboard.common.actions')}</th></tr></thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {loading ? <tr><td colSpan="8" className="px-4 py-8 text-center text-slate-400 animate-pulse">Loading...</td></tr> :
-                  targets.length === 0 ? <tr><td colSpan="8" className="px-4 py-8 text-center text-slate-400">No targets configured.</td></tr> :
+                  {loading ? <tr><td colSpan="8" className="px-4 py-8 text-center text-slate-400 animate-pulse">{t('adminDashboard.common.loading')}</td></tr> :
+                  targets.length === 0 ? <tr><td colSpan="8" className="px-4 py-8 text-center text-slate-400">{t('adminDashboard.targets.empty')}</td></tr> :
                   targets.map(t => {
                     const salesman = users.find(u => u.id === t.user_id);
                     const pc = t.percentage_config || {};
@@ -948,46 +943,46 @@ export default function AdminDashboard() {
                   setEditingSkuInc(null);
                 });
               }} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6 grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Nama SKU</label><input required value={skuIncForm.sku_name} onChange={e=>setSkuIncForm({...skuIncForm, sku_name:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800 text-sm" placeholder="Pisang Cavendish 9KG"/></div>
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Bonus BE/Unit</label><input type="number" step="0.1" required value={skuIncForm.bonus_be} onChange={e=>setSkuIncForm({...skuIncForm, bonus_be:Number(e.target.value)})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800 text-sm"/></div>
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Tgl Mulai</label><input type="date" required value={skuIncForm.start_date} onChange={e=>setSkuIncForm({...skuIncForm, start_date:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800 text-sm"/></div>
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Tgl Selesai</label><input type="date" required value={skuIncForm.end_date} onChange={e=>setSkuIncForm({...skuIncForm, end_date:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800 text-sm"/></div>
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Active</label><select value={skuIncForm.is_active ? 'true' : 'false'} onChange={e=>setSkuIncForm({...skuIncForm, is_active: e.target.value === 'true'})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800 text-sm"><option value="true">Active</option><option value="false">Inactive</option></select></div>
-                <div className="md:col-span-1 flex gap-2"><button type="submit" className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">Save</button><button type="button" onClick={()=>setShowSkuIncForm(false)} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg"><X className="w-4 h-4 mx-auto"/></button></div>
-                <div className="md:col-span-3"><label className="block text-xs font-medium text-slate-500 mb-1">Catatan</label><input value={skuIncForm.notes} onChange={e=>setSkuIncForm({...skuIncForm, notes:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800 text-sm" placeholder="Deskripsi event atau promo"/></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.skuIncentives.form.skuName')}</label><input required value={skuIncForm.sku_name} onChange={e=>setSkuIncForm({...skuIncForm, sku_name:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800 text-sm" placeholder={t('adminDashboard.skuIncentives.form.skuPlaceholder')}/></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.skuIncentives.form.bonusBE')}</label><input type="number" step="0.1" required value={skuIncForm.bonus_be} onChange={e=>setSkuIncForm({...skuIncForm, bonus_be:Number(e.target.value)})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800 text-sm"/></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.skuIncentives.form.startDate')}</label><input type="date" required value={skuIncForm.start_date} onChange={e=>setSkuIncForm({...skuIncForm, start_date:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800 text-sm"/></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.skuIncentives.form.endDate')}</label><input type="date" required value={skuIncForm.end_date} onChange={e=>setSkuIncForm({...skuIncForm, end_date:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800 text-sm"/></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.active')}</label><select value={skuIncForm.is_active ? 'true' : 'false'} onChange={e=>setSkuIncForm({...skuIncForm, is_active: e.target.value === 'true'})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800 text-sm"><option value="true">{t('adminDashboard.common.active')}</option><option value="false">{t('adminDashboard.common.inactive')}</option></select></div>
+                <div className="md:col-span-1 flex gap-2"><button type="submit" className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">{t('adminDashboard.common.save')}</button><button type="button" onClick={()=>setShowSkuIncForm(false)} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg"><X className="w-4 h-4 mx-auto"/></button></div>
+                <div className="md:col-span-3"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.skuIncentives.headers.notes')}</label><input value={skuIncForm.notes} onChange={e=>setSkuIncForm({...skuIncForm, notes:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800 text-sm" placeholder={t('adminDashboard.skuIncentives.form.notesPlaceholder')}/></div>
               </form>
             )}
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
                 <div>
-                  <h2 className="text-lg font-bold">Insentif SKU</h2>
-                  <p className="text-xs text-slate-500 mt-1">Atur bonus BE tambahan per SKU untuk event/promo tertentu.</p>
+                  <h2 className="text-lg font-bold">{t('adminDashboard.skuIncentives.title')}</h2>
+                  <p className="text-xs text-slate-500 mt-1">{t('adminDashboard.skuIncentives.subtitle')}</p>
                 </div>
                 <button onClick={()=>{
                   setSkuIncForm({ sku_name: '', bonus_be: 0, start_date: new Date().toISOString().split('T')[0], end_date: new Date(Date.now() + 30*24*60*60*1000).toISOString().split('T')[0], is_active: true, notes: '' });
                   setEditingSkuInc(null);
                   setShowSkuIncForm(true);
-                }} className="flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700"><Plus className="w-4 h-4"/> Tambah Insentif</button>
+                }} className="flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700"><Plus className="w-4 h-4"/> {t('adminDashboard.skuIncentives.add')}</button>
               </div>
               <PaginationControls type="sku-incentives" meta={pagination['sku-incentives']} onChange={(t, o) => fetchTable(t, o)} />
               <div className="overflow-x-auto"><table className="w-full text-sm text-left min-w-[700px]">
                 <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800"><tr>
-                  <th className="px-4 py-3">SKU</th>
-                  <th className="px-4 py-3">Bonus BE</th>
-                  <th className="px-4 py-3">Periode</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Dibuat Oleh</th>
-                  <th className="px-4 py-3">Catatan</th>
-                  <th className="px-4 py-3 text-right">Actions</th>
+                  <th className="px-4 py-3">{t('adminDashboard.common.sku')}</th>
+                  <th className="px-4 py-3">{t('adminDashboard.skuIncentives.headers.bonusBE')}</th>
+                  <th className="px-4 py-3">{t('adminDashboard.skuIncentives.headers.period')}</th>
+                  <th className="px-4 py-3">{t('adminDashboard.common.status')}</th>
+                  <th className="px-4 py-3">{t('adminDashboard.skuIncentives.headers.createdBy')}</th>
+                  <th className="px-4 py-3">{t('adminDashboard.skuIncentives.headers.notes')}</th>
+                  <th className="px-4 py-3 text-right">{t('adminDashboard.common.actions')}</th>
                 </tr></thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {loading ? <tr><td colSpan="7" className="px-4 py-8 text-center text-slate-400 animate-pulse">Loading...</td></tr> :
-                  skuIncentives.length === 0 ? <tr><td colSpan="7" className="px-4 py-8 text-center text-slate-400">Belum ada insentif SKU.</td></tr> :
+                  {loading ? <tr><td colSpan="7" className="px-4 py-8 text-center text-slate-400 animate-pulse">{t('adminDashboard.common.loading')}</td></tr> :
+                  skuIncentives.length === 0 ? <tr><td colSpan="7" className="px-4 py-8 text-center text-slate-400">{t('adminDashboard.skuIncentives.empty')}</td></tr> :
                   skuIncentives.map(inc => (
                     <tr key={inc.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                       <td className="px-4 py-3 font-medium">{inc.sku_name}</td>
                       <td className="px-4 py-3 font-bold text-emerald-600">+{parseFloat(inc.bonus_be).toFixed(1)} BE</td>
-                      <td className="px-4 py-3 text-xs">{inc.start_date ? new Date(inc.start_date).toLocaleDateString('id-ID') : '-'} s/d {inc.end_date ? new Date(inc.end_date).toLocaleDateString('id-ID') : '-'}</td>
+                      <td className="px-4 py-3 text-xs">{inc.start_date ? new Date(inc.start_date).toLocaleDateString(dateLocale) : '-'} {t('adminDashboard.skuIncentives.periodSeparator')} {inc.end_date ? new Date(inc.end_date).toLocaleDateString(dateLocale) : '-'}</td>
                       <td className="px-4 py-3">
                         {(() => {
                           const now = new Date(); const start = new Date(inc.start_date); const end = new Date(inc.end_date);
@@ -1000,7 +995,7 @@ export default function AdminDashboard() {
                           else if (isFuture) badge = 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400';
                           else badge = 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400';
                           return <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${badge}`}>
-                            {!inc.is_active ? 'Nonaktif' : isActiveNow ? 'Aktif' : isFuture ? 'Mendatang' : 'Kadaluarsa'}
+                            {!inc.is_active ? t('adminDashboard.skuIncentives.status.inactive') : isActiveNow ? t('adminDashboard.skuIncentives.status.active') : isFuture ? t('adminDashboard.skuIncentives.status.upcoming') : t('adminDashboard.skuIncentives.status.expired')}
                           </span>;
                         })()}
                       </td>

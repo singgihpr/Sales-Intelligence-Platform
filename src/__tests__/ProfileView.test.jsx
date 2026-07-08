@@ -1,8 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '../test-utils';
 import userEvent from '@testing-library/user-event';
 import ProfileView from '../components/ProfileView';
-import { BrowserRouter } from 'react-router-dom';
 
 // Mock fetch globally
 global.fetch = vi.fn();
@@ -35,15 +34,13 @@ const mockDashboardData = {
 
 function renderProfileView(props = {}) {
   return render(
-    <BrowserRouter>
-      <ProfileView
-        role="sales"
-        dashboardData={mockDashboardData}
-        onLogout={vi.fn()}
-        onProfileUpdate={vi.fn()}
-        {...props}
-      />
-    </BrowserRouter>
+    <ProfileView
+      role="sales"
+      dashboardData={mockDashboardData}
+      onLogout={vi.fn()}
+      onProfileUpdate={vi.fn()}
+      {...props}
+    />
   );
 }
 
@@ -100,13 +97,11 @@ describe('ProfileView', () => {
       };
 
       render(
-        <BrowserRouter>
-          <ProfileView
-            role="supervisor"
-            dashboardData={supervisorData}
-            onLogout={vi.fn()}
-          />
-        </BrowserRouter>
+        <ProfileView
+          role="supervisor"
+          dashboardData={supervisorData}
+          onLogout={vi.fn()}
+        />
       );
 
       await waitFor(() => screen.getByText('John Doe'));

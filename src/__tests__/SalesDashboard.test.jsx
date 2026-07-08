@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen } from '../test-utils';
 import SalesDashboard from '../components/SalesDashboard';
 
 const mockData = {
@@ -123,40 +123,22 @@ describe('SalesDashboard', () => {
     });
   });
 
-  describe('✅ Visit Schedule', () => {
-    it('renders visit schedule section', () => {
+  describe('✅ Removed Sections', () => {
+    it('does not render visit schedule section', () => {
       render(<SalesDashboard data={mockData} onVisitClick={vi.fn()} />);
-      expect(screen.getByText('Jadwal Kunjungan')).toBeInTheDocument();
+      expect(screen.queryByText('Jadwal Kunjungan')).not.toBeInTheDocument();
     });
 
-    it('renders outlet in visit list', () => {
+    it('does not render outlet health section', () => {
       render(<SalesDashboard data={mockData} onVisitClick={vi.fn()} />);
-      expect(screen.getByText('Outlet A')).toBeInTheDocument();
-    });
-
-    it('renders check-in button', () => {
-      render(<SalesDashboard data={mockData} onVisitClick={vi.fn()} />);
-      expect(screen.getAllByText('Check-in')[0]).toBeInTheDocument();
-    });
-  });
-
-  describe('✅ Outlet Health', () => {
-    it('renders outlet health section', () => {
-      render(<SalesDashboard data={mockData} onVisitClick={vi.fn()} />);
-      expect(screen.getByText('Outlet Perlu Perhatian')).toBeInTheDocument();
-    });
-
-    it('renders unhealthy outlet with alert', () => {
-      render(<SalesDashboard data={mockData} onVisitClick={vi.fn()} />);
-      expect(screen.getAllByText('Outlet B')[0]).toBeInTheDocument();
-      expect(screen.getByText(/Needs/)).toBeInTheDocument();
+      expect(screen.queryByText('Outlet Perlu Perhatian')).not.toBeInTheDocument();
     });
   });
 
   describe('✅ Loading State', () => {
     it('renders loading state when data is null', () => {
       render(<SalesDashboard data={null} onVisitClick={vi.fn()} />);
-      expect(screen.getByText('Loading dashboard...')).toBeInTheDocument();
+      expect(screen.getByText('Memuat dashboard...')).toBeInTheDocument();
     });
   });
 });

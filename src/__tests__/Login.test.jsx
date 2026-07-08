@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Login from '../pages/Login';
 import { BrowserRouter } from 'react-router-dom';
+import { I18nProvider } from '../lib/i18n.jsx';
 
 // Mock fetch
 global.fetch = vi.fn();
@@ -19,9 +20,11 @@ vi.mock('react-router-dom', async () => {
 
 function renderLogin() {
   return render(
-    <BrowserRouter>
-      <Login />
-    </BrowserRouter>
+    <I18nProvider>
+      <BrowserRouter>
+        <Login />
+      </BrowserRouter>
+    </I18nProvider>
   );
 }
 
@@ -37,11 +40,11 @@ describe('Login', () => {
       renderLogin();
 
       expect(screen.getByText('Sales Intelligence')).toBeInTheDocument();
-      expect(screen.getByText('Sign in to your account')).toBeInTheDocument();
+      expect(screen.getByText('Masuk ke akun Anda')).toBeInTheDocument();
       expect(screen.getByPlaceholderText('name@company.com')).toBeInTheDocument();
       expect(screen.getByPlaceholderText('••••••••')).toBeInTheDocument();
-      expect(screen.getByText('Sign In')).toBeInTheDocument();
-      expect(screen.getByText('Use your admin/sales credentials')).toBeInTheDocument();
+      expect(screen.getByText('Masuk')).toBeInTheDocument();
+      expect(screen.getByText('Gunakan kredensial admin/sales Anda')).toBeInTheDocument();
     });
   });
 
@@ -76,7 +79,7 @@ describe('Login', () => {
 
       const emailInput = screen.getByPlaceholderText('name@company.com');
       const passwordInput = screen.getByPlaceholderText('••••••••');
-      const submitButton = screen.getByText('Sign In');
+      const submitButton = screen.getByText('Masuk');
 
       await userEvent.type(emailInput, 'test@example.com');
       await userEvent.type(passwordInput, 'password123');
@@ -111,7 +114,7 @@ describe('Login', () => {
 
       const emailInput = screen.getByPlaceholderText('name@company.com');
       const passwordInput = screen.getByPlaceholderText('••••••••');
-      const submitButton = screen.getByText('Sign In');
+      const submitButton = screen.getByText('Masuk');
 
       await userEvent.type(emailInput, 'admin@example.com');
       await userEvent.type(passwordInput, 'admin123');
@@ -132,7 +135,7 @@ describe('Login', () => {
 
       const emailInput = screen.getByPlaceholderText('name@company.com');
       const passwordInput = screen.getByPlaceholderText('••••••••');
-      const submitButton = screen.getByText('Sign In');
+      const submitButton = screen.getByText('Masuk');
 
       await userEvent.type(emailInput, 'wrong@example.com');
       await userEvent.type(passwordInput, 'wrongpass');
@@ -150,13 +153,13 @@ describe('Login', () => {
 
       const emailInput = screen.getByPlaceholderText('name@company.com');
       const passwordInput = screen.getByPlaceholderText('••••••••');
-      const submitButton = screen.getByText('Sign In');
+      const submitButton = screen.getByText('Masuk');
 
       await userEvent.type(emailInput, 'test@example.com');
       await userEvent.type(passwordInput, 'password123');
       await userEvent.click(submitButton);
 
-      expect(screen.getByText('Signing in...')).toBeInTheDocument();
+      expect(screen.getByText('Memasukkan...')).toBeInTheDocument();
     });
   });
 });

@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import App from './App.jsx';
 import AdminDashboard from './pages/AdminDashboard.jsx';
 import Login from './pages/Login.jsx';
+import { I18nProvider } from './lib/i18n.jsx';
 import './index.css';
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
@@ -29,8 +30,9 @@ const FullWidthLayout = ({ children }) => (
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <Routes>
+    <I18nProvider>
+      <BrowserRouter>
+        <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/" element={
           <ProtectedRoute allowedRoles={['sales', 'supervisor', 'admin']}>
@@ -48,5 +50,6 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         } />
       </Routes>
     </BrowserRouter>
+    </I18nProvider>
   </React.StrictMode>
 );
