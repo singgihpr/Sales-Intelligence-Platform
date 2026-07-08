@@ -1624,11 +1624,30 @@ export const handler = async (event) => {
                     const outletIdMap = Object.fromEntries(refreshedOutlets.map(o => [o.name, o.id]));
                     const userIdMap = Object.fromEntries(allUsers.map(u => [u.name, u.id]));
 
+                    // Deduplicate rows within this upload by (outlet, salesman, date, sku)
+                    // and sum their volumes. Prevents "ON CONFLICT DO UPDATE command cannot
+                    // affect row a second time" when the same combo appears multiple times
+                    // in a single file.
+                    const dedupMap = new Map();
+                    for (const r of validRows) {
+                      const outletId = outletIdMap[r.outletName];
+                      const salesId = userIdMap[r.salesName];
+                      if (!outletId || !salesId) continue;
+                      const key = `${outletId}|${salesId}|${r.date}|${r.sku || ''}`;
+                      const existing = dedupMap.get(key);
+                      if (existing) {
+                        existing.volume += r.volume;
+                      } else {
+                        dedupMap.set(key, { ...r, outletId, salesId });
+                      }
+                    }
+                    const dedupedRows = Array.from(dedupMap.values());
+
                     // Batch insert using UNNEST (PostgreSQL array expansion)
                     const BATCH_SIZE = 50;
                     let insertedCount = 0;
-                    for (let i = 0; i < validRows.length; i += BATCH_SIZE) {
-                      const batch = validRows.slice(i, i + BATCH_SIZE);
+                    for (let i = 0; i < dedupedRows.length; i += BATCH_SIZE) {
+                      const batch = dedupedRows.slice(i, i + BATCH_SIZE);
                       const ids = [];
                       const outletIds = [];
                       const salesIds = [];
@@ -1637,15 +1656,15 @@ export const handler = async (event) => {
                       const skus = [];
 
                       for (const r of batch) {
-                        const outletId = outletIdMap[r.outletName];
-                        const salesId = userIdMap[r.salesName];
+                        const outletId = r.outletId;
+                        const salesId = r.salesId;
                         if (!outletId || !salesId) continue;
                         ids.push(randomUUID());
                         outletIds.push(outletId);
                         salesIds.push(salesId);
                         dates.push(r.date);
                         volumes.push(r.volume);
-                        skus.push(r.sku || null);
+                        skus.push(r.sku || '');
                       }
 
                       if (ids.length > 0) {
@@ -1659,7 +1678,8 @@ export const handler = async (event) => {
                             ${volumes}::numeric[],
                             ${skus}::text[]
                           )
-                          ON CONFLICT DO NOTHING
+                          ON CONFLICT (outlet_id, sales_id, record_date, sku_name) DO UPDATE SET
+                            volume_be = EXCLUDED.volume_be
                         `;
                         insertedCount += ids.length;
                       }
@@ -1667,9 +1687,9 @@ export const handler = async (event) => {
                     // --- Auto-assign outlets to primary salesman based on file volume ---
                     let assignmentsCreated = 0, assignmentsUpdated = 0;
                     const outletVolumeMap = {}; // outletId → { salesId, totalVolume }
-                    for (const r of validRows) {
-                      const outletId = outletIdMap[r.outletName];
-                      const salesId = userIdMap[r.salesName];
+                    for (const r of dedupedRows) {
+                      const outletId = r.outletId;
+                      const salesId = r.salesId;
                       if (!outletId || !salesId) continue;
                       if (!outletVolumeMap[outletId]) outletVolumeMap[outletId] = { salesId, totalVolume: 0 };
                       outletVolumeMap[outletId].totalVolume += r.volume;

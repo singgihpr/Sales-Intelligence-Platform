@@ -829,8 +829,8 @@ export default function AdminDashboard() {
                 <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6">
                   <h3 className="text-sm font-bold mb-3">Assign Salesmen to Supervisor</h3>
                   {(() => {
-                    const unassigned = allSalesUsers.filter(u => !u.supervisor_id || u.supervisor_id !== selectedSupId);
-                    if (unassigned.length === 0) return <p className="text-xs text-slate-400">All salesmen are assigned to this supervisor.</p>;
+                    const unassigned = allSalesUsers.filter(u => !u.supervisor_id);
+                    if (unassigned.length === 0) return <p className="text-xs text-slate-400">No unassigned salesmen available.</p>;
                     const selectedSup = supervisors.find(s => s.id === selectedSupId);
                     return (
                       <>

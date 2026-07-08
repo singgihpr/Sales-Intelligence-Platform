@@ -52,8 +52,9 @@ CREATE TABLE sales_records (
   sales_id UUID REFERENCES users(id),
   record_date DATE NOT NULL,
   volume_be NUMERIC NOT NULL,
-  sku_name TEXT
+  sku_name TEXT NOT NULL DEFAULT ''
 );
+CREATE UNIQUE INDEX idx_sales_records_unique ON sales_records (outlet_id, sales_id, record_date, sku_name);
 
 -- 5. Targets (with structured bonus configs)
 CREATE TABLE targets (
