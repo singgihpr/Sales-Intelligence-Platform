@@ -34,6 +34,28 @@ const convertToBE = (boxCount, kg) => {
   return (Number(boxCount) * Number(kg)) / 12;
 };
 
+const getActiveIncentives = async (dateStart, dateEnd) => {
+  try {
+    const rows = await sql`
+      SELECT id, sku_name, bonus_be, start_date, end_date, notes
+      FROM sku_incentives
+      WHERE is_active = true
+        AND start_date <= ${dateEnd} AND end_date >= ${dateStart}
+      ORDER BY sku_name
+    `;
+    return rows.map(r => ({
+      id: r.id,
+      sku_name: r.sku_name,
+      bonus_be: parseFloat(r.bonus_be || 0),
+      start_date: r.start_date,
+      end_date: r.end_date,
+      notes: r.notes || ''
+    }));
+  } catch {
+    return [];
+  }
+};
+
 const levenshteinDistance = (a, b) => {
   const matrix = [];
   for (let i = 0; i <= b.length; i++) matrix[i] = [i];
@@ -75,128 +97,35 @@ const detectFileFormat = (rows) => {
       return 'ayotama_v2';
     }
   }
-  if (rows.length > 1 && String(rows[1]?.[1]).includes('Rincian Faktur')) {
-    return 'ayotama_v1';
-  }
   return 'unknown';
-};
-
-const parseAyotamaRows = (rows, allOutlets, allUsers) => {
-  // Find header row (row 5, index 4) and date columns
-  const headerRow = rows[4];
-  if (!headerRow) return { total: 0, valid: 0, invalid: 0, rows: [] };
-
-  const dateColumns = [];
-  for (let i = 7; i < headerRow.length; i++) {
-    const val = headerRow[i];
-    if (val && (typeof val === 'number' || val instanceof Date)) {
-      const dateStr = parseExcelDate(val);
-      if (dateStr) dateColumns.push({ index: i, date: dateStr });
-    }
-  }
-
-  if (dateColumns.length === 0) {
-    return { action: 'preview', total: 0, valid: 0, invalid: 0, rows: [], error: 'No date columns found in header row' };
-  }
-
-  // Build branch-to-salesman mapping dynamically from users
-  const salesUsers = allUsers.filter(u => u.role === 'sales');
-  const branchMap = {};
-  for (let i = 0; i < salesUsers.length; i++) {
-    branchMap[i + 1] = salesUsers[i];
-  }
-  const fallbackUser = salesUsers[0] || { id: process.env.DEFAULT_USER_ID, name: 'Default Sales' };
-
-  const preview = [];
-  let currentBranch = '';
-  let currentOutlet = '';
-  let currentOutletMatch = null;
-
-  for (let rowIdx = 5; rowIdx < rows.length; rowIdx++) {
-    const row = rows[rowIdx];
-    if (!row || row.length < 7) continue;
-
-    // Check if this is a footer/page row
-    if (String(row[1]).includes('Halaman')) break;
-
-    // Extract branch code if present in col C
-    const branchCell = String(row[2] || '').trim();
-    if (branchCell && branchCell.match(/^\d{2}\s/)) {
-      currentBranch = branchCell;
-    }
-
-    // Extract outlet name if present in col D; carry forward if empty
-    const outletCell = String(row[3] || '').trim();
-    if (outletCell) {
-      currentOutlet = outletCell;
-      currentOutletMatch = fuzzyMatchOutlet(outletCell, allOutlets);
-    }
-
-    const unitType = String(row[4] || '').trim().toUpperCase();
-    const productName = String(row[6] || '').trim();
-
-    if (!productName) continue;
-
-    // Skip unsupported unit types
-    if (!['BOX', 'KG', 'PAX', 'PCS', 'KRJ'].includes(unitType)) continue;
-
-    const kg = extractKgFromName(productName);
-    let volumeBE = 0;
-    if (unitType === 'BOX') {
-      // convertToBE expects (boxCount, kg)
-      volumeBE = convertToBE(1, kg);
-    } else if (unitType === 'KG') {
-      // Already in KG, convert directly: qty KG / 12 = BE
-      volumeBE = 1 / 12;
-    } else {
-      // PAX, PCS, KRJ — also extract KG from name and convert
-      volumeBE = convertToBE(1, kg);
-    }
-
-    const branchNum = currentBranch ? parseInt(currentBranch.split(' ')[0]) : 1;
-    const salesUser = branchMap[branchNum] || fallbackUser;
-
-    // For each date column with non-zero value
-    for (const dc of dateColumns) {
-      const qty = Number(row[dc.index] || 0);
-      if (qty <= 0) continue;
-
-      const totalVolumeBE = Number((qty * volumeBE).toFixed(3));
-      const warnings = [];
-      if (!currentOutlet) warnings.push('Missing outlet name');
-      if (!currentOutletMatch) warnings.push(`Outlet baru akan dibuat: ${currentOutlet}`);
-      if (!dc.date) warnings.push(`Invalid date at col ${dc.index}`);
-
-      preview.push({
-        row: rowIdx + 1,
-        outletName: currentOutletMatch ? currentOutletMatch.name : (currentOutlet || '-'),
-        branchArea: currentBranch || '',
-        salesName: salesUser.name,
-        date: dc.date,
-        volume: totalVolumeBE,
-        sku: productName,
-        valid: true,
-        isNewOutlet: !currentOutletMatch,
-        warnings
-      });
-    }
-  }
-
-  return {
-    action: 'preview',
-    total: preview.length,
-    valid: preview.filter(p => p.valid).length,
-    invalid: preview.filter(p => !p.valid).length,
-    rows: preview
-  };
 };
 
 const parseAyotamaV2Rows = (rows, allOutlets, allUsers) => {
   const headerRow = rows[4];
   if (!headerRow) return { total: 0, valid: 0, invalid: 0, rows: [] };
 
+  const findHeaderIndex = (keywords) => {
+    for (let i = 0; i < headerRow.length; i++) {
+      const cell = String(headerRow[i] || '').toLowerCase().trim();
+      for (const kw of keywords) {
+        if (cell.includes(kw.toLowerCase())) return i;
+      }
+    }
+    return -1;
+  };
+
+  const branchIdx = findHeaderIndex(['nama cabang']);
+  const salesmanIdx = findHeaderIndex(['nama penjual utama']);
+  const outletIdx = findHeaderIndex(['pelanggan']);
+  const unitIdx = findHeaderIndex(['nama sa', 'satuan']);
+  const productIdx = findHeaderIndex(['nama barang', 'barang']);
+
+  if (branchIdx === -1 || salesmanIdx === -1 || outletIdx === -1 || unitIdx === -1 || productIdx === -1) {
+    return { action: 'preview', total: 0, valid: 0, invalid: 0, rows: [], error: 'Required columns not found in header row' };
+  }
+
   const dateColumns = [];
-  for (let i = 7; i < headerRow.length; i++) {
+  for (let i = productIdx + 1; i < headerRow.length; i++) {
     const val = headerRow[i];
     if (val && (typeof val === 'number' || val instanceof Date)) {
       const dateStr = parseExcelDate(val);
@@ -222,24 +151,24 @@ const parseAyotamaV2Rows = (rows, allOutlets, allUsers) => {
 
     if (String(row[1]).includes('Halaman')) break;
 
-    const branchCell = String(row[2] || '').trim();
+    const branchCell = String(row[branchIdx] || '').trim();
     if (branchCell && branchCell.match(/^\d{2}\s/)) {
       currentBranch = branchCell;
     }
 
-    const salesmanCell = String(row[3] || '').trim();
+    const salesmanCell = String(row[salesmanIdx] || '').trim();
     if (salesmanCell) {
       currentSalesman = salesmanCell;
     }
 
-    const outletCell = String(row[4] || '').trim();
+    const outletCell = String(row[outletIdx] || '').trim();
     if (outletCell) {
       currentOutlet = outletCell;
       currentOutletMatch = fuzzyMatchOutlet(outletCell, allOutlets);
     }
 
-    const unitType = String(row[5] || '').trim().toUpperCase();
-    const productName = String(row[6] || '').trim();
+    const unitType = String(row[unitIdx] || '').trim().toUpperCase();
+    const productName = String(row[productIdx] || '').trim();
 
     if (!productName) continue;
     if (!['BOX', 'KG', 'PAX', 'PCS', 'KRJ'].includes(unitType)) continue;
@@ -419,8 +348,14 @@ const getCurrentMonthRange = () => {
   return { month, year, start, end };
 };
 
-const getUserDashboardData = async (userId) => {
+const getUserDashboardData = async (userId, options = {}) => {
+  const { dateStart: optStart, dateEnd: optEnd, groupBy: optGroupBy } = options;
+  const useProvidedRange = optStart && optEnd;
+
   const { month, year, start, end } = getCurrentMonthRange();
+  const rangeStart = useProvidedRange ? String(optStart) : start;
+  const rangeEnd = useProvidedRange ? String(optEnd) : end;
+  const groupBy = optGroupBy || 'month';
 
   const userRows = await sql`SELECT id, name, email, role, region, level FROM users WHERE id = ${userId}`;
   if (!userRows.length) throw new Error('User not found');
@@ -452,20 +387,42 @@ const getUserDashboardData = async (userId) => {
     }
   }
 
-  const salesSum = await sql`SELECT COALESCE(SUM(volume_be), 0) as total FROM sales_records WHERE sales_id = ${userId} AND record_date >= ${start}`;
+  const salesSum = await sql`SELECT COALESCE(SUM(volume_be), 0) as total FROM sales_records WHERE sales_id = ${userId} AND record_date >= ${rangeStart} AND record_date <= ${rangeEnd}`;
   const currentBE = parseFloat(salesSum[0].total);
   const targetBE = parseFloat(targetData.target_be);
 
-  // Percentage bonus
-  const percentageResult = calculatePercentageBonus(currentBE, targetBE, targetData.percentage_config);
+  const salesAll = await sql`SELECT COALESCE(SUM(volume_be), 0) as total FROM sales_records WHERE sales_id = ${userId} AND record_date >= ${start} AND record_date <= ${end}`;
+  const monthBE = parseFloat(salesAll[0].total);
 
-  // Volume bonus
-  const volumeResult = calculateVolumeBonus(currentBE, targetData.volume_config);
+  const activeIncentives = await getActiveIncentives(rangeStart, rangeEnd);
+  const incentiveMap = {};
+  for (const inc of activeIncentives) {
+    incentiveMap[inc.sku_name] = inc.bonus_be;
+  }
 
-  // Active outlets
+  let incentiveBE = 0;
+  try {
+    const totalIncentiveBE = await sql`
+      SELECT COALESCE(SUM(si.bonus_be), 0) as total
+      FROM sales_records sr
+      JOIN sku_incentives si ON sr.sku_name = si.sku_name
+        AND sr.record_date >= si.start_date AND sr.record_date <= si.end_date
+      WHERE sr.sales_id = ${userId}
+        AND sr.record_date >= ${rangeStart} AND sr.record_date <= ${rangeEnd}
+        AND si.is_active = true
+    `;
+    incentiveBE = parseFloat(totalIncentiveBE[0]?.total || 0);
+  } catch {
+    incentiveBE = 0;
+  }
+  const totalWithIncentive = currentBE + incentiveBE;
+
+  const percentageResult = calculatePercentageBonus(monthBE, targetBE, targetData.percentage_config);
+  const volumeResult = calculateVolumeBonus(monthBE, targetData.volume_config);
+
   const assignedRows = await sql`
     SELECT o.id, EXISTS(
-      SELECT 1 FROM sales_records sr WHERE sr.outlet_id = o.id AND sr.record_date >= ${start} AND sr.record_date <= ${end}
+      SELECT 1 FROM sales_records sr WHERE sr.outlet_id = o.id AND sr.sales_id = ${userId} AND sr.record_date >= ${rangeStart} AND sr.record_date <= ${rangeEnd}
     ) as is_active
     FROM outlets o
     INNER JOIN outlet_assignments oa ON oa.outlet_id = o.id AND oa.salesman_id = ${userId} AND oa.unassigned_at IS NULL
@@ -473,10 +430,8 @@ const getUserDashboardData = async (userId) => {
   const totalAssigned = assignedRows.length;
   const activeCount = assignedRows.filter(r => r.is_active).length;
   const activeResult = calculateActiveOutletsBonus(totalAssigned, activeCount, targetData.active_outlets_config);
-
   const totalBonus = percentageResult.bonus + volumeResult.bonus + activeResult.bonus;
 
-  // SKU performance - current month detailed
   const prevMonthNum = month === 1 ? 12 : month - 1;
   const prevMonthYear = month === 1 ? year - 1 : year;
   const prevMonthStart = `${prevMonthYear}-${String(prevMonthNum).padStart(2, '0')}-01`;
@@ -484,6 +439,17 @@ const getUserDashboardData = async (userId) => {
   const lastYearStart = `${year - 1}-${String(month).padStart(2, '0')}-01`;
   const lastYearEnd = `${year - 1}-${String(month).padStart(2, '0')}-${String(new Date(year - 1, month, 0).getDate()).padStart(2, '0')}`;
 
+  // For custom date range, compute a previous period of equal length
+  const rangeDuration = (new Date(rangeEnd) - new Date(rangeStart)) / (1000 * 60 * 60 * 24) + 1;
+  const prevPeriodEnd = new Date(new Date(rangeStart).getTime() - 24 * 60 * 60 * 1000);
+  const prevPeriodStart = new Date(prevPeriodEnd.getTime() - (rangeDuration - 1) * 24 * 60 * 60 * 1000);
+  const prevStartStr = prevPeriodStart.toISOString().split('T')[0];
+  const prevEndStr = prevPeriodEnd.toISOString().split('T')[0];
+
+  const effectivePrevStart = useProvidedRange ? prevStartStr : prevMonthStart;
+  const effectivePrevEnd = useProvidedRange ? prevEndStr : prevMonthEnd;
+
+  // SKU performance - use provided range
   const skuCurrent = await sql`
     SELECT 
       sku_name,
@@ -491,14 +457,14 @@ const getUserDashboardData = async (userId) => {
       COUNT(*) as transaction_count,
       AVG(volume_be) as avg_order
     FROM sales_records
-    WHERE sales_id = ${userId} AND record_date >= ${start} AND record_date <= ${end}
+    WHERE sales_id = ${userId} AND record_date >= ${rangeStart} AND record_date <= ${rangeEnd}
       AND sku_name IS NOT NULL AND sku_name <> ''
     GROUP BY sku_name ORDER BY volume DESC LIMIT 5
   `;
 
   const skuPrevMonth = await sql`
     SELECT sku_name, SUM(volume_be) as volume, COUNT(*) as transaction_count FROM sales_records
-    WHERE sales_id = ${userId} AND record_date >= ${prevMonthStart} AND record_date <= ${prevMonthEnd}
+    WHERE sales_id = ${userId} AND record_date >= ${effectivePrevStart} AND record_date <= ${effectivePrevEnd}
       AND sku_name IS NOT NULL AND sku_name <> ''
     GROUP BY sku_name
   `;
@@ -518,20 +484,52 @@ const getUserDashboardData = async (userId) => {
       SUM(volume_be) as outlet_volume
     FROM sales_records sr
     LEFT JOIN outlets o ON o.id = sr.outlet_id
-    WHERE sr.sales_id = ${userId} AND sr.record_date >= ${start} AND sr.record_date <= ${end}
+    WHERE sr.sales_id = ${userId} AND sr.record_date >= ${rangeStart} AND sr.record_date <= ${rangeEnd}
       AND sr.sku_name IS NOT NULL AND sr.sku_name <> ''
     GROUP BY sr.sku_name, o.name
     ORDER BY sr.sku_name, outlet_volume DESC
   `;
 
-  // Get weekly breakdown for current month (4 weeks)
+  // For groupBy: aggregate differently based on requested level
+  let skuGrouped;
+  try {
+    if (groupBy === 'day') {
+      skuGrouped = await sql`
+        SELECT 
+          sku_name,
+          TO_CHAR(record_date, 'YYYY-MM-DD') as label,
+          SUM(volume_be) as daily_volume
+        FROM sales_records
+        WHERE sales_id = ${userId} AND record_date >= ${rangeStart} AND record_date <= ${rangeEnd}
+          AND sku_name IS NOT NULL AND sku_name <> ''
+        GROUP BY sku_name, TO_CHAR(record_date, 'YYYY-MM-DD')
+        ORDER BY sku_name, label
+      `;
+    } else if (groupBy === 'week') {
+      skuGrouped = await sql`
+        SELECT 
+          sku_name,
+          TO_CHAR(record_date, 'YYYY-WW') as label,
+          MIN(record_date) as week_start,
+          SUM(volume_be) as daily_volume
+        FROM sales_records
+        WHERE sales_id = ${userId} AND record_date >= ${rangeStart} AND record_date <= ${rangeEnd}
+          AND sku_name IS NOT NULL AND sku_name <> ''
+        GROUP BY sku_name, TO_CHAR(record_date, 'YYYY-WW')
+        ORDER BY sku_name, week_start
+      `;
+    }
+  } catch {
+    skuGrouped = null;
+  }
+
   const skuWeekly = await sql`
     SELECT 
       sku_name,
       EXTRACT(WEEK FROM record_date) as week_num,
       SUM(volume_be) as weekly_volume
     FROM sales_records
-    WHERE sales_id = ${userId} AND record_date >= ${start} AND record_date <= ${end}
+    WHERE sales_id = ${userId} AND record_date >= ${rangeStart} AND record_date <= ${rangeEnd}
       AND sku_name IS NOT NULL AND sku_name <> ''
     GROUP BY sku_name, EXTRACT(WEEK FROM record_date)
     ORDER BY sku_name, week_num
@@ -546,12 +544,12 @@ const getUserDashboardData = async (userId) => {
       o.name as outlet_name
     FROM sales_records sr
     LEFT JOIN outlets o ON o.id = sr.outlet_id
-    WHERE sr.sales_id = ${userId} AND sr.record_date >= ${start} AND sr.record_date <= ${end}
+    WHERE sr.sales_id = ${userId} AND sr.record_date >= ${rangeStart} AND sr.record_date <= ${rangeEnd}
       AND sr.sku_name IS NOT NULL AND sr.sku_name <> ''
     ORDER BY sr.sku_name, sr.record_date DESC
   `;
 
-  // Get detailed transactions per SKU for PREVIOUS month
+  // Get detailed transactions per SKU for PREVIOUS period
   const skuPrevTransactions = await sql`
     SELECT 
       sr.sku_name,
@@ -560,7 +558,7 @@ const getUserDashboardData = async (userId) => {
       o.name as outlet_name
     FROM sales_records sr
     LEFT JOIN outlets o ON o.id = sr.outlet_id
-    WHERE sr.sales_id = ${userId} AND sr.record_date >= ${prevMonthStart} AND sr.record_date <= ${prevMonthEnd}
+    WHERE sr.sales_id = ${userId} AND sr.record_date >= ${effectivePrevStart} AND sr.record_date <= ${effectivePrevEnd}
       AND sr.sku_name IS NOT NULL AND sr.sku_name <> ''
     ORDER BY sr.sku_name, sr.record_date DESC
   `;
@@ -605,6 +603,8 @@ const getUserDashboardData = async (userId) => {
 
   const skuPerformance = skuCurrent.map(r => {
     const volume = parseFloat(r.volume || 0);
+    const incentiveBonus = incentiveMap[r.sku_name] || 0;
+    const totalVolume = volume + incentiveBonus;
     const prevData = prevMonthMap[r.sku_name] || { volume: 0, transactionCount: 0 };
     const prev = prevData.volume;
     const lastY = lastYearMap[r.sku_name] || 0;
@@ -612,15 +612,15 @@ const getUserDashboardData = async (userId) => {
     const yoyTrend = lastY > 0 ? ((volume - lastY) / lastY) * 100 : (volume > 0 ? 100 : 0);
     const topOutletData = topOutletMap[r.sku_name] || { name: '-', volume: 0 };
     const weekly = weeklyMap[r.sku_name] || [];
-    // Pad to 4 weeks if less
     while (weekly.length < 4) weekly.unshift(0);
-    // Take last 4 weeks
     const monthlyHistory = weekly.slice(-4);
     const topOutletContrib = volume > 0 ? Math.round((topOutletData.volume / volume) * 100) : 0;
     
     return {
       name: r.sku_name,
       volume,
+      incentiveBE: incentiveBonus,
+      totalBE: totalVolume,
       transactionCount: parseInt(r.transaction_count || 0),
       avgOrder: parseFloat(r.avg_order || 0),
       topOutlet: topOutletData.name,
@@ -637,18 +637,31 @@ const getUserDashboardData = async (userId) => {
     };
   });
 
-  // Outlets data with historical BE for OHS calculation
+  // Build grouped data for charting
+  let groupedData = null;
+  if (skuGrouped) {
+    const groupedMap = {};
+    for (const row of skuGrouped) {
+      if (!groupedMap[row.label]) groupedMap[row.label] = { label: row.label, weekStart: row.week_start, volume: 0, skus: {} };
+      groupedMap[row.label].volume += parseFloat(row.daily_volume || 0);
+      groupedMap[row.label].skus[row.sku_name] = parseFloat(row.daily_volume || 0);
+    }
+    groupedData = Object.values(groupedMap).sort((a, b) => a.label.localeCompare(b.label));
+  }
+
+  // Outlets with range-aware OHS
   const { start: prevStart, end: prevEnd } = getPreviousMonthRange(month, year, 1);
   const { start: prev2Start, end: prev2End } = getPreviousMonthRange(month, year, 2);
-  const historyStart = prev2Start;
+  const outletRangeStart = useProvidedRange ? rangeStart : prev2Start;
+  const outletRangeEnd = useProvidedRange ? rangeEnd : end;
 
   const outletRows = await sql`
     SELECT 
       o.id, o.name, o.type, o.address, o.contact_person, o.branch_area,
-      COALESCE(SUM(CASE WHEN sr.record_date >= ${start} AND sr.record_date <= ${end} THEN sr.volume_be ELSE 0 END), 0) as be_current,
-      COALESCE(SUM(CASE WHEN sr.record_date >= ${prevStart} AND sr.record_date <= ${prevEnd} THEN sr.volume_be ELSE 0 END), 0) as be_prev,
+      COALESCE(SUM(CASE WHEN sr.record_date >= ${rangeStart} AND sr.record_date <= ${rangeEnd} THEN sr.volume_be ELSE 0 END), 0) as be_current,
+      COALESCE(SUM(CASE WHEN sr.record_date >= ${effectivePrevStart} AND sr.record_date <= ${effectivePrevEnd} THEN sr.volume_be ELSE 0 END), 0) as be_prev,
       COALESCE(SUM(CASE WHEN sr.record_date >= ${prev2Start} AND sr.record_date <= ${prev2End} THEN sr.volume_be ELSE 0 END), 0) as be_prev2,
-      COALESCE(SUM(CASE WHEN sr.record_date >= ${historyStart} AND sr.record_date <= ${end} THEN 1 ELSE 0 END), 0) as freq_3mo,
+      COALESCE(SUM(CASE WHEN sr.record_date >= ${outletRangeStart} AND sr.record_date <= ${outletRangeEnd} THEN 1 ELSE 0 END), 0) as freq_3mo,
       MAX(sr.record_date) as last_order
     FROM outlets o
     LEFT JOIN outlet_assignments oa ON oa.outlet_id = o.id AND oa.salesman_id = ${userId} AND oa.unassigned_at IS NULL
@@ -658,17 +671,153 @@ const getUserDashboardData = async (userId) => {
   `;
 
   const now = new Date();
-  const daysElapsed = now.getDate();
+  const daysElapsed = Math.min(now.getDate(), new Date(year, month, 0).getDate());
   const daysInMonth = new Date(year, month, 0).getDate();
+
+  const rangeDays = useProvidedRange ? rangeDuration : daysElapsed;
+
+  // --- Analytics Insights ---
+
+  let analytics = null;
+  let velocity = [];
+  let avgVelocity = 0;
+  let coveragePct = 0;
+  let penetrationMap = {};
+  let whereToVisit = [];
+  let whatToSell = [];
+  let lostOutlets = [];
+  let newOutlets = [];
+  let lostCount = 0;
+  let newCount = 0;
+
+  try {
+    // 1. Sales velocity: BE per day in the range
+    const dailySales = await sql`
+      SELECT TO_CHAR(record_date, 'YYYY-MM-DD') as d, SUM(volume_be) as daily_be, COUNT(*) as tx_count
+      FROM sales_records
+      WHERE sales_id = ${userId} AND record_date >= ${rangeStart} AND record_date <= ${rangeEnd}
+      GROUP BY d ORDER BY d
+    `;
+    velocity = dailySales.map(r => ({
+      date: r.d,
+      be: parseFloat(r.daily_be || 0),
+      transactions: parseInt(r.tx_count || 0)
+    }));
+    avgVelocity = rangeDays > 0 ? currentBE / rangeDays : 0;
+
+    // 2. SKU penetration: % of active outlets buying each SKU
+    const skuPenetration = await sql`
+      SELECT sr.sku_name, COUNT(DISTINCT sr.outlet_id) as outlet_count
+      FROM sales_records sr
+      INNER JOIN outlet_assignments oa ON oa.outlet_id = sr.outlet_id
+        AND oa.salesman_id = ${userId} AND oa.unassigned_at IS NULL
+      WHERE sr.sales_id = ${userId} AND sr.record_date >= ${rangeStart} AND sr.record_date <= ${rangeEnd}
+        AND sr.sku_name IS NOT NULL AND sr.sku_name <> ''
+      GROUP BY sr.sku_name
+    `;
+    for (const row of skuPenetration) {
+      penetrationMap[row.sku_name] = totalAssigned > 0
+        ? Math.round((parseInt(row.outlet_count) / totalAssigned) * 100)
+        : 0;
+    }
+
+    // 3. Coverage: active/assigned outlets
+    coveragePct = totalAssigned > 0 ? Math.round((activeCount / totalAssigned) * 100) : 0;
+
+    // 4. "Where to visit" — outlets with longest gap since last order
+    whereToVisit = outletRows
+      .map(o => {
+        const daysSince = o.last_order ? Math.floor((Date.now() - new Date(o.last_order)) / 86400000) : 99;
+        return {
+          id: o.id, name: o.name, type: o.type, branchArea: o.branch_area || '',
+          beMonth: parseFloat(o.be_current || 0),
+          lastOrder: daysSince === 0 ? 'Today' : daysSince,
+          daysSince
+        };
+      })
+      .filter(o => o.daysSince > 0)
+      .sort((a, b) => b.daysSince - a.daysSince)
+      .slice(0, 5);
+
+    // 5. "What to sell" — SKUs with low penetration but good growth
+    whatToSell = skuPerformance
+      .filter(sku => penetrationMap[sku.name] < 50 && sku.momTrend > 0)
+      .sort((a, b) => b.momTrend - a.momTrend)
+      .slice(0, 5)
+      .map(sku => ({
+        name: sku.name,
+        volume: sku.volume,
+        momTrend: sku.momTrend,
+        penetration: penetrationMap[sku.name] || 0,
+        activeIncentive: (incentiveMap[sku.name] || 0) > 0
+      }));
+
+    // 6. Lost outlets: were active in prev period, inactive now
+    const prevActiveOutlets = await sql`
+      SELECT DISTINCT o.id, o.name
+      FROM outlets o
+      INNER JOIN outlet_assignments oa ON oa.outlet_id = o.id AND oa.salesman_id = ${userId} AND oa.unassigned_at IS NULL
+      INNER JOIN sales_records sr ON sr.outlet_id = o.id AND sr.sales_id = ${userId}
+      WHERE sr.record_date >= ${effectivePrevStart} AND sr.record_date <= ${effectivePrevEnd}
+    `;
+    const prevActiveIds = new Set(prevActiveOutlets.map(r => r.id));
+    const currentActiveIds = new Set(assignedRows.filter(r => r.is_active).map(r => r.id));
+    for (const o of prevActiveOutlets) {
+      if (!currentActiveIds.has(o.id)) lostOutlets.push({ id: o.id, name: o.name });
+    }
+    lostCount = lostOutlets.length;
+
+    for (const r of assignedRows) {
+      if (r.is_active && !prevActiveIds.has(r.id)) {
+        const outletInfo = outletRows.find(o => o.id === r.id);
+        if (outletInfo) newOutlets.push({ id: outletInfo.id, name: outletInfo.name, type: outletInfo.type });
+      }
+    }
+    newCount = newOutlets.length;
+
+    analytics = {
+      velocity,
+      avgVelocity,
+      coveragePct,
+      activeOutletsCount: activeCount,
+      totalAssignedOutlets: totalAssigned,
+      penetrationMap,
+      whereToVisit,
+      whatToSell,
+      lostOutlets,
+      newOutlets,
+      lostCount,
+      newCount
+    };
+  } catch {
+    analytics = {
+      velocity: [],
+      avgVelocity: 0,
+      coveragePct,
+      activeOutletsCount: activeCount,
+      totalAssignedOutlets: totalAssigned,
+      penetrationMap: {},
+      whereToVisit: [],
+      whatToSell: [],
+      lostOutlets: [],
+      newOutlets: [],
+      lostCount: 0,
+      newCount: 0
+    };
+  }
 
   return {
     user,
+    dateRange: { start: rangeStart, end: rangeEnd, groupBy },
     dashboardStats: {
       monthlyTargetBE: targetBE,
       currentBE,
+      incentiveBE,
+      totalWithIncentive,
       daysElapsed,
       totalWorkingDays: 22,
       daysInMonth,
+      rangeDays,
       percentageConfig: targetData.percentage_config,
       volumeConfig: targetData.volume_config,
       activeOutletsConfig: targetData.active_outlets_config
@@ -700,7 +849,17 @@ const getUserDashboardData = async (userId) => {
         alert: ohsData.score < 40 ? 'Unhealthy Outlet' : ohsData.score < 70 ? 'Needs Attention' : null
       };
     }),
-    skuPerformance,
+    skuPerformance: skuPerformance.map(sku => ({
+      ...sku,
+      penetration: (analytics?.penetrationMap || {})[sku.name] || 0
+    })),
+    analytics,
+    groupedData,
+    activeIncentives: activeIncentives.map(i => ({
+      sku_name: i.sku_name,
+      bonus_be: i.bonus_be,
+      notes: i.notes
+    })),
     daysElapsed,
     daysInMonth
   };
@@ -728,7 +887,6 @@ const getSupervisorDashboardData = async (supervisorId, options = {}) => {
   }
 
   const teamIds = teamRows.map(m => m.id);
-  const salesFilter = isAdmin ? sql`` : sql`AND sr.sales_id = ANY(${teamIds}::uuid[])`;
 
   const teamData = [];
   let totalTeamBE = 0;
@@ -818,7 +976,7 @@ const getSupervisorDashboardData = async (supervisorId, options = {}) => {
     LEFT JOIN users u ON sr.sales_id = u.id
     WHERE sr.record_date >= ${start} AND sr.record_date <= ${end}
       AND sr.sku_name IS NOT NULL AND sr.sku_name <> ''
-      ${salesFilter}
+      AND sr.sales_id = ANY(${teamIds}::uuid[])
     GROUP BY sr.sku_name ORDER BY volume DESC LIMIT 10
   `;
 
@@ -828,7 +986,7 @@ const getSupervisorDashboardData = async (supervisorId, options = {}) => {
     LEFT JOIN users u ON sr.sales_id = u.id
     WHERE sr.record_date >= ${prevMonthStart} AND sr.record_date <= ${prevMonthEnd}
       AND sr.sku_name IS NOT NULL AND sr.sku_name <> ''
-      ${salesFilter}
+      AND sr.sales_id = ANY(${teamIds}::uuid[])
     GROUP BY sr.sku_name
   `;
 
@@ -838,7 +996,7 @@ const getSupervisorDashboardData = async (supervisorId, options = {}) => {
     LEFT JOIN users u ON sr.sales_id = u.id
     WHERE sr.record_date >= ${lastYearStart} AND sr.record_date <= ${lastYearEnd}
       AND sr.sku_name IS NOT NULL AND sr.sku_name <> ''
-      ${salesFilter}
+      AND sr.sales_id = ANY(${teamIds}::uuid[])
     GROUP BY sr.sku_name
   `;
 
@@ -852,7 +1010,7 @@ const getSupervisorDashboardData = async (supervisorId, options = {}) => {
     LEFT JOIN users u ON sr.sales_id = u.id
     WHERE sr.record_date >= ${start} AND sr.record_date <= ${end}
       AND sr.sku_name IS NOT NULL AND sr.sku_name <> ''
-      ${salesFilter}
+      AND sr.sales_id = ANY(${teamIds}::uuid[])
     GROUP BY sr.sku_name, o.name
     ORDER BY sr.sku_name, outlet_volume DESC
   `;
@@ -866,7 +1024,7 @@ const getSupervisorDashboardData = async (supervisorId, options = {}) => {
     LEFT JOIN users u ON sr.sales_id = u.id
     WHERE sr.record_date >= ${start} AND sr.record_date <= ${end}
       AND sr.sku_name IS NOT NULL AND sr.sku_name <> ''
-      ${salesFilter}
+      AND sr.sales_id = ANY(${teamIds}::uuid[])
     GROUP BY sr.sku_name, EXTRACT(WEEK FROM sr.record_date)
     ORDER BY sr.sku_name, week_num
   `;
@@ -882,7 +1040,7 @@ const getSupervisorDashboardData = async (supervisorId, options = {}) => {
     LEFT JOIN users u ON sr.sales_id = u.id
     WHERE sr.record_date >= ${start} AND sr.record_date <= ${end}
       AND sr.sku_name IS NOT NULL AND sr.sku_name <> ''
-      ${salesFilter}
+      AND sr.sales_id = ANY(${teamIds}::uuid[])
     ORDER BY sr.sku_name, sr.record_date DESC
   `;
 
@@ -897,7 +1055,7 @@ const getSupervisorDashboardData = async (supervisorId, options = {}) => {
     LEFT JOIN users u ON sr.sales_id = u.id
     WHERE sr.record_date >= ${prevMonthStart} AND sr.record_date <= ${prevMonthEnd}
       AND sr.sku_name IS NOT NULL AND sr.sku_name <> ''
-      ${salesFilter}
+      AND sr.sales_id = ANY(${teamIds}::uuid[])
     ORDER BY sr.sku_name, sr.record_date DESC
   `;
 
@@ -973,7 +1131,7 @@ const getSupervisorDashboardData = async (supervisorId, options = {}) => {
     FROM outlets o
     LEFT JOIN outlet_assignments oa ON oa.outlet_id = o.id AND oa.unassigned_at IS NULL
     LEFT JOIN users u ON oa.salesman_id = u.id
-    LEFT JOIN sales_records sr ON sr.outlet_id = o.id${isAdmin ? sql`` : sql` AND sr.sales_id = ANY(${teamIds}::uuid[])`}
+    LEFT JOIN sales_records sr ON sr.outlet_id = o.id AND sr.sales_id = ANY(${teamIds}::uuid[])
     GROUP BY o.id, o.name, o.type, o.address, o.contact_person, o.branch_area, u.name
   `;
 
@@ -1187,10 +1345,29 @@ export const handler = async (event) => {
         `;
         return paginateResponse(dataRes, parseInt(countRes[0].cnt));
       }
+      if (type === 'sku-incentives') {
+        const dataRes = await sql`
+          SELECT si.*, u.name as created_by_name
+          FROM sku_incentives si
+          LEFT JOIN users u ON si.created_by = u.id
+          WHERE (si.sku_name ILIKE ${searchPattern} OR si.notes ILIKE ${searchPattern})
+          ORDER BY si.created_at DESC LIMIT ${limit} OFFSET ${offset}
+        `;
+        const countRes = await sql`
+          SELECT COUNT(*) as cnt FROM sku_incentives si
+          WHERE (si.sku_name ILIKE ${searchPattern} OR si.notes ILIKE ${searchPattern})
+        `;
+        return paginateResponse(dataRes, parseInt(countRes[0].cnt));
+      }
       // Dashboard data
       if (!type && user) {
+        const dashOptions = {
+          dateStart: params.dateStart || null,
+          dateEnd: params.dateEnd || null,
+          groupBy: params.groupBy || 'month'
+        };
         if (user.role === 'sales') {
-          return { statusCode: 200, body: JSON.stringify(await getUserDashboardData(user.id)) };
+          return { statusCode: 200, body: JSON.stringify(await getUserDashboardData(user.id, dashOptions)) };
         }
         if (user.role === 'supervisor') {
           return { statusCode: 200, body: JSON.stringify(await getSupervisorDashboardData(user.id)) };
@@ -1198,6 +1375,18 @@ export const handler = async (event) => {
         if (user.role === 'admin') {
           return { statusCode: 200, body: JSON.stringify(await getSupervisorDashboardData(user.id, { isAdmin: true })) };
         }
+      }
+      // Analytics endpoint
+      if (type === 'analytics' && user) {
+        const aOptions = {
+          dateStart: params.dateStart || null,
+          dateEnd: params.dateEnd || null,
+          groupBy: params.groupBy || 'month'
+        };
+        if (user.role === 'sales') {
+          return { statusCode: 200, body: JSON.stringify(await getUserDashboardData(user.id, aOptions)) };
+        }
+        return { statusCode: 400, body: JSON.stringify({ error: 'Analytics not supported for this role' }) };
       }
       // Fallback old transformToFrontend for backwards compat
       if (!type) {
@@ -1288,6 +1477,14 @@ export const handler = async (event) => {
         `;
         return { statusCode: 201, body: JSON.stringify(res[0]) };
       }
+      if (type === 'sku-incentives' && isJson) {
+        const res = await sql`
+          INSERT INTO sku_incentives (id, sku_name, bonus_be, start_date, end_date, is_active, created_by, notes)
+          VALUES (gen_random_uuid(), ${body.sku_name}, ${body.bonus_be}, ${body.start_date}, ${body.end_date}, ${body.is_active ?? true}, ${user?.id || null}, ${body.notes || ''})
+          RETURNING *
+        `;
+        return { statusCode: 201, body: JSON.stringify(res[0]) };
+      }
       if (!isJson) {
         const action = params.action || 'upload';
         let bodyBuffer;
@@ -1317,8 +1514,8 @@ export const handler = async (event) => {
                 const rawRows = xlsx.utils.sheet_to_json(sheet, { header: 1, raw: true });
                 const fileFormat = detectFileFormat(rawRows);
 
-                if (fileFormat === 'ayotama_v1' || fileFormat === 'ayotama_v2') {
-                  const parser = fileFormat === 'ayotama_v2' ? parseAyotamaV2Rows : parseAyotamaRows;
+                if (fileFormat === 'ayotama_v2') {
+                  const parser = parseAyotamaV2Rows;
                   const allOutlets = await sql`SELECT id, name FROM outlets`;
                   let allUsers = await sql`SELECT id, name, role FROM users`;
 
@@ -1567,6 +1764,20 @@ export const handler = async (event) => {
         `;
         return { statusCode: res.length ? 200 : 404, body: JSON.stringify(res[0] || { error: 'Not found' }) };
       }
+      if (type === 'sku-incentives' && id) {
+        const res = await sql`
+          UPDATE sku_incentives SET
+            sku_name = COALESCE(${body.sku_name}, sku_name),
+            bonus_be = COALESCE(${body.bonus_be}::numeric, bonus_be),
+            start_date = COALESCE(${body.start_date}, start_date),
+            end_date = COALESCE(${body.end_date}, end_date),
+            is_active = COALESCE(${body.is_active}::boolean, is_active),
+            notes = COALESCE(${body.notes}, notes),
+            updated_at = CURRENT_TIMESTAMP
+          WHERE id = ${id} RETURNING *
+        `;
+        return { statusCode: res.length ? 200 : 404, body: JSON.stringify(res[0] || { error: 'Not found' }) };
+      }
       const res = await sql`
         UPDATE sales_records SET
           outlet_id = (SELECT id FROM outlets WHERE name = ${body.outlet}),
@@ -1583,6 +1794,7 @@ export const handler = async (event) => {
       else if (type === 'outlets') await sql`DELETE FROM outlets WHERE id=${id}`;
       else if (type === 'assignments') await sql`DELETE FROM outlet_assignments WHERE id=${id}`;
       else if (type === 'targets') await sql`DELETE FROM targets WHERE id=${id}`;
+      else if (type === 'sku-incentives') await sql`DELETE FROM sku_incentives WHERE id=${id}`;
       else await sql`DELETE FROM sales_records WHERE id=${id}`;
       return { statusCode: 200, body: JSON.stringify({ success: true }) };
     }

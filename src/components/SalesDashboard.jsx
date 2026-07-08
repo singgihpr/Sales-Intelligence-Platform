@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { ArrowUpRight, ArrowDownRight, Target, Package, ShoppingBag, Navigation, CheckCircle, Info, ChevronDown, ChevronUp, TrendingUp, TrendingDown, Minus, BarChart3, X, Store as StoreIcon } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, Target, Package, ShoppingBag, Navigation, CheckCircle, Info, ChevronDown, ChevronUp, TrendingUp, TrendingDown, Minus, BarChart3, X, Store as StoreIcon, Calendar, Zap, MapPin, Gift, AlertTriangle, Activity, PieChart } from 'lucide-react';
 import { BonusSummaryCard, PercentageBonusCard, VolumeBonusCard, ActiveOutletsBonusCard } from './BonusCards';
+import DateRangeFilter from './DateRangeFilter';
 
 const ProgressCircle = ({ percent, size = 160, strokeWidth = 12 }) => {
   const radius = (size - strokeWidth) / 2;
@@ -30,8 +31,9 @@ const Card = ({ children, className = "", onClick }) => (
   </div>
 );
 
-export default function SalesDashboard({ data, onVisitClick }) {
-  const { user, dashboardStats, bonusSummary, outlets, skuPerformance, daysElapsed, daysInMonth } = data || {};
+export default function SalesDashboard({ data, onVisitClick, dateFilter }) {
+  const { user, dashboardStats, bonusSummary, outlets, skuPerformance, analytics, groupedData, activeIncentives, daysElapsed, daysInMonth } = data || {};
+  const groupBy = dateFilter?.groupBy || data?.dateRange?.groupBy || 'month';
 
   if (!dashboardStats) return <div className="text-center text-slate-400 py-20">Loading dashboard...</div>;
 
@@ -58,13 +60,34 @@ export default function SalesDashboard({ data, onVisitClick }) {
         <p className="text-sm text-slate-500">{user?.region || ''} {user?.level ? `• ${user.level}` : ''} • {new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}</p>
       </section>
 
+      {/* Date Range Filter */}
+      {dateFilter && (
+        <Card className="p-4">
+          <DateRangeFilter
+            activePreset={dateFilter.preset}
+            dateStart={dateFilter.dateStart}
+            dateEnd={dateFilter.dateEnd}
+            groupBy={dateFilter.groupBy}
+            onPresetChange={dateFilter.onPresetChange}
+            onCustomChange={dateFilter.onCustomChange}
+            onGroupByChange={dateFilter.onGroupByChange}
+          />
+        </Card>
+      )}
+
       {/* Main Attainment Gauge */}
       <Card className="flex flex-col items-center py-8">
         <ProgressCircle percent={attainment} />
         <div className="mt-6 w-full grid grid-cols-2 gap-4 divide-x divide-slate-100 dark:divide-slate-800">
           <div className="text-center">
             <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Aktual (BE)</p>
-            <p className="text-lg font-bold text-slate-900 dark:text-white">{dashboardStats.currentBE.toFixed(1)} <span className="text-xs font-normal text-slate-400">/ {dashboardStats.monthlyTargetBE}</span></p>
+            <p className="text-lg font-bold text-slate-900 dark:text-white">
+              {dashboardStats.currentBE.toFixed(1)}
+              {dashboardStats.incentiveBE > 0 && (
+                <span className="text-xs font-medium text-emerald-500 ml-1">+{dashboardStats.incentiveBE.toFixed(1)} insentif</span>
+              )}
+              <span className="text-xs font-normal text-slate-400"> / {dashboardStats.monthlyTargetBE}</span>
+            </p>
           </div>
           <div className="text-center">
             <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Proyeksi Akhir</p>
@@ -77,6 +100,84 @@ export default function SalesDashboard({ data, onVisitClick }) {
           </div>
         </div>
       </Card>
+
+      {/* Analytics KPIs */}
+      {analytics && (
+        <section className="space-y-3">
+          <h3 className="font-bold text-slate-900 dark:text-white px-1 flex items-center gap-2">
+            <Activity className="w-4 h-4 text-blue-500" /> Insight Analitik
+          </h3>
+          <div className="grid grid-cols-2 gap-3">
+            {/* Velocity */}
+            <Card className="p-4">
+              <div className="flex items-center gap-2 mb-1">
+                <Zap className="w-4 h-4 text-amber-500" />
+                <span className="text-[10px] font-bold text-slate-500 uppercase">Velocity</span>
+              </div>
+              <p className="text-xl font-bold text-slate-900 dark:text-white">{analytics.avgVelocity.toFixed(1)}</p>
+              <p className="text-[10px] text-slate-400">BE / hari rata-rata</p>
+            </Card>
+
+            {/* Coverage */}
+            <Card className="p-4">
+              <div className="flex items-center gap-2 mb-1">
+                <StoreIcon className="w-4 h-4 text-blue-500" />
+                <span className="text-[10px] font-bold text-slate-500 uppercase">Cakupan</span>
+              </div>
+              <p className="text-xl font-bold text-slate-900 dark:text-white">{analytics.coveragePct}%</p>
+              <p className="text-[10px] text-slate-400">{analytics.activeOutletsCount}/{analytics.totalAssignedOutlets} outlet aktif</p>
+            </Card>
+          </div>
+        </section>
+      )}
+
+      {/* Grouped Data Chart */}
+      {groupedData && groupedData.length > 0 && (
+        <Card className="p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <BarChart3 className="w-4 h-4 text-purple-500" />
+            <span className="text-xs font-bold text-slate-500 uppercase">
+              Volume {groupBy === 'day' ? 'Per Hari' : groupBy === 'week' ? 'Per Minggu' : 'Per Bulan'}
+            </span>
+          </div>
+          <div className="space-y-2">
+            {groupedData.slice(-14).map((item, idx) => {
+              const maxVol = Math.max(...groupedData.map(g => g.volume), 1);
+              const barWidth = (item.volume / maxVol) * 100;
+              return (
+                <div key={idx} className="flex items-center gap-3 text-xs">
+                  <span className="w-20 text-slate-500 truncate text-right text-[10px]">
+                    {item.weekStart ? new Date(item.weekStart).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }) : item.label}
+                  </span>
+                  <div className="flex-1 h-4 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                    <div className="h-full bg-purple-400 rounded-full transition-all duration-500" style={{ width: `${barWidth}%` }} />
+                  </div>
+                  <span className="w-16 text-right font-bold text-slate-700 dark:text-slate-300 text-[10px]">{item.volume.toFixed(0)} BE</span>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      {/* Active Incentive Badges */}
+      {(activeIncentives || []).length > 0 && (
+        <section className="space-y-3">
+          <h3 className="font-bold text-slate-900 dark:text-white px-1 flex items-center gap-2">
+            <Gift className="w-4 h-4 text-pink-500" /> Insentif SKU Aktif
+          </h3>
+          <div className="flex flex-wrap gap-2">
+            {activeIncentives.map((inc, idx) => (
+              <div key={idx} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-pink-50 dark:bg-pink-950/30 border border-pink-100 dark:border-pink-900/50 rounded-full text-xs font-medium text-pink-700 dark:text-pink-400">
+                <Gift className="w-3 h-3" />
+                <span>{inc.sku_name}</span>
+                <span className="font-bold">+{inc.bonus_be} BE</span>
+                {inc.notes && <span className="text-pink-500/70 text-[10px] truncate max-w-24" title={inc.notes}>{inc.notes}</span>}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Actionable Insights */}
       <div className="grid grid-cols-1 gap-4">
@@ -91,6 +192,65 @@ export default function SalesDashboard({ data, onVisitClick }) {
           </div>
         </div>
       </div>
+
+      {/* Where to Visit / What to Sell */}
+      {analytics && (
+        <section className="space-y-3">
+          <div className="grid grid-cols-1 gap-3">
+            {/* Where to Visit */}
+            {analytics.whereToVisit && analytics.whereToVisit.length > 0 && (
+              <Card className="p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <MapPin className="w-4 h-4 text-orange-500" />
+                  <span className="text-xs font-bold text-slate-500 uppercase">Outlet yang Perlu Dikunjungi</span>
+                  {analytics.lostCount > 0 && (
+                    <span className="ml-auto text-[10px] font-bold text-red-500 bg-red-50 dark:bg-red-950 px-2 py-0.5 rounded-full">
+                      {analytics.lostCount} hilang dari periode sebelumnya
+                    </span>
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  {analytics.whereToVisit.map((o, idx) => (
+                    <div key={idx} className="flex items-center justify-between py-1.5 px-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-slate-700 dark:text-slate-300">{o.name}</span>
+                        <span className="text-slate-400">{o.branchArea || o.type}</span>
+                      </div>
+                      <span className={`font-bold ${o.daysSince > 7 ? 'text-red-500' : 'text-amber-500'}`}>
+                        {o.daysSince === 'Today' ? 'Hari ini' : `${o.daysSince} hari`}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
+
+            {/* What to Sell */}
+            {analytics.whatToSell && analytics.whatToSell.length > 0 && (
+              <Card className="p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <TrendingUp className="w-4 h-4 text-emerald-500" />
+                  <span className="text-xs font-bold text-slate-500 uppercase">Produk untuk Digeber</span>
+                </div>
+                <div className="space-y-1.5">
+                  {analytics.whatToSell.map((sku, idx) => (
+                    <div key={idx} className="flex items-center justify-between py-1.5 px-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-slate-700 dark:text-slate-300">{sku.name}</span>
+                        {sku.activeIncentive && <span className="text-[10px] font-bold text-pink-500 bg-pink-50 dark:bg-pink-950/30 px-1.5 py-0.5 rounded">+Insentif</span>}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-slate-400">Penetrasi {sku.penetration}%</span>
+                        <span className="font-bold text-emerald-600">+{sku.momTrend.toFixed(0)}%</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
+          </div>
+        </section>
+      )}
 
       {/* Total Bonus Summary */}
       <BonusSummaryCard bonusSummary={bonusSummary} />
@@ -185,6 +345,7 @@ export function SkuDetailModal({ sku, onClose }) {
   const prevTransactions = sku.prevTransactions || [];
   const trendColor = sku.momTrend > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400';
   const trendBg = sku.momTrend > 0 ? 'bg-emerald-50 border-emerald-100 dark:bg-emerald-950/30 dark:border-emerald-900/50' : 'bg-red-50 border-red-100 dark:bg-red-950/30 dark:border-red-900/50';
+  const hasIncentive = (sku.incentiveBE || 0) > 0;
 
   return (
     <div className="fixed inset-0 z-[60] flex items-end justify-center sm:items-center">
@@ -202,11 +363,18 @@ export function SkuDetailModal({ sku, onClose }) {
         <div className="p-5 space-y-6">
           <div className="grid grid-cols-3 gap-3">
             <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
-              <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">Volume Bulan Ini</p>
-              <p className="text-xl font-bold text-slate-900 dark:text-white">{sku.volume.toFixed(1)} <span className="text-xs font-normal text-slate-400">BE</span></p>
+              <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">Volume Periode Ini</p>
+              <p className="text-xl font-bold text-slate-900 dark:text-white">
+                {sku.totalBE ? sku.totalBE.toFixed(1) : sku.volume.toFixed(1)} <span className="text-xs font-normal text-slate-400">BE</span>
+              </p>
+              {hasIncentive && (
+                <p className="text-[10px] font-medium text-pink-600 mt-0.5">
+                  <span className="text-slate-400">Default: {sku.volume.toFixed(1)}</span> + {sku.incentiveBE.toFixed(1)} BE insentif
+                </p>
+              )}
             </div>
             <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
-              <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">Volume Bulan Lalu</p>
+              <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider mb-1">Volume Periode Lalu</p>
               <p className="text-xl font-bold text-slate-900 dark:text-white">{sku.prevVolume > 0 ? sku.prevVolume.toFixed(1) : '0'} <span className="text-xs font-normal text-slate-400">BE</span></p>
             </div>
             <div className={`p-4 rounded-xl border ${trendBg}`}>
@@ -390,6 +558,9 @@ export function SkuAnalysisSection({ skuPerformance }) {
                 <div className="flex items-center justify-between text-xs font-bold mb-1.5">
                   <div className="flex items-center gap-2">
                     <span className="text-slate-700 dark:text-slate-200">{sku.name}</span>
+                    {(sku.incentiveBE || 0) > 0 && (
+                      <span className="text-[9px] font-bold text-pink-600 bg-pink-50 dark:bg-pink-950/40 px-1.5 py-0.5 rounded">+{sku.incentiveBE.toFixed(1)}</span>
+                    )}
                     <span className="text-[10px] font-medium text-slate-400">({sku.mixPercent.toFixed(1)}%)</span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -429,8 +600,8 @@ export function SkuAnalysisSection({ skuPerformance }) {
                       <p className="text-sm font-bold text-slate-800 dark:text-white">{sku.avgOrder.toFixed(1)} BE</p>
                     </div>
                     <div className="bg-white dark:bg-slate-800 rounded-lg p-2">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase">Top Outlet</p>
-                      <p className="text-sm font-bold text-slate-800 dark:text-white truncate" title={sku.topOutlet}>{sku.topOutlet}</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase">Penetrasi</p>
+                      <p className="text-sm font-bold text-slate-800 dark:text-white">{sku.penetration || 0}%</p>
                     </div>
                   </div>
                 </div>

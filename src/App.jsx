@@ -82,6 +82,10 @@ export default function App() {
   const [dashboardData, setDashboardData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [datePreset, setDatePreset] = useState('thisMonth');
+  const [dateStart, setDateStart] = useState(null);
+  const [dateEnd, setDateEnd] = useState(null);
+  const [groupBy, setGroupBy] = useState('month');
 
   const { pulling, pullProgress, triggered } = usePullToRefresh(true);
 
@@ -126,7 +130,11 @@ export default function App() {
   const fetchDashboard = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api', {
+      let url = '/api';
+      if (dateStart && dateEnd) {
+        url = `/api?dateStart=${dateStart}&dateEnd=${dateEnd}&groupBy=${groupBy}`;
+      }
+      const res = await fetch(url, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) {
@@ -149,7 +157,7 @@ export default function App() {
     if (token) fetchDashboard();
     const interval = setInterval(fetchDashboard, 30000);
     return () => clearInterval(interval);
-  }, [token]);
+  }, [token, dateStart, dateEnd, groupBy]);
 
   const navigateToOutlet = (outlet) => {
     setSelectedOutlet(outlet);
@@ -188,11 +196,21 @@ export default function App() {
     switch (activeTab) {
       case 'home':
         if (role === 'sales') {
-          return <SalesDashboard data={dashboardData} onVisitClick={navigateToOutlet} />;
+          return <SalesDashboard data={dashboardData} onVisitClick={navigateToOutlet} dateFilter={{
+            preset: datePreset, dateStart, dateEnd, groupBy,
+            onPresetChange: (preset, start, end) => { setDatePreset(preset); setDateStart(start); setDateEnd(end); },
+            onCustomChange: (start, end) => { setDatePreset('custom'); setDateStart(start); setDateEnd(end); },
+            onGroupByChange: setGroupBy
+          }} />;
         }
         return <SupervisorDashboard data={dashboardData} onNavigate={handleNavigate} />;
       case 'outlets':
-        return <OutletListView outlets={dashboardData?.outlets || []} onSelectOutlet={navigateToOutlet} />;
+        return <OutletListView outlets={dashboardData?.outlets || []} onSelectOutlet={navigateToOutlet} dateFilter={{
+          preset: datePreset, dateStart, dateEnd, groupBy,
+          onPresetChange: (preset, start, end) => { setDatePreset(preset); setDateStart(start); setDateEnd(end); },
+          onCustomChange: (start, end) => { setDatePreset('custom'); setDateStart(start); setDateEnd(end); },
+          onGroupByChange: setGroupBy
+        }} />;
       case 'team':
         if (role === 'supervisor' || role === 'admin') {
           return <SupervisorDashboard data={dashboardData} onNavigate={handleNavigate} />;
@@ -219,7 +237,12 @@ export default function App() {
         );
       default:
         return role === 'sales'
-          ? <SalesDashboard data={dashboardData} onVisitClick={navigateToOutlet} />
+          ? <SalesDashboard data={dashboardData} onVisitClick={navigateToOutlet} dateFilter={{
+            preset: datePreset, dateStart, dateEnd, groupBy,
+            onPresetChange: (preset, start, end) => { setDatePreset(preset); setDateStart(start); setDateEnd(end); },
+            onCustomChange: (start, end) => { setDatePreset('custom'); setDateStart(start); setDateEnd(end); },
+            onGroupByChange: setGroupBy
+          }} />
           : <SupervisorDashboard data={dashboardData} onNavigate={handleNavigate} />;
     }
   };

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Search, ArrowLeft, Calendar, MessageSquare, History, MapPin, ChevronRight, Info, X, ChevronLeft, ChevronDown, TrendingUp, TrendingDown, Activity, RefreshCw } from 'lucide-react';
+import DateRangeFilter from './DateRangeFilter';
 
 const OHSInfoModal = ({ open, onClose }) => {
   if (!open) return null;
@@ -86,7 +87,7 @@ const ProgressBar = ({ label, value, color, percentage }) => (
   </div>
 );
 
-export function OutletListView({ outlets, onSelectOutlet }) {
+export function OutletListView({ outlets, onSelectOutlet, dateFilter }) {
   const [search, setSearch] = useState("");
   const [showInfo, setShowInfo] = useState(false);
   const [filterOHS, setFilterOHS] = useState('all'); // all, healthy, warning, unhealthy
@@ -124,6 +125,19 @@ export function OutletListView({ outlets, onSelectOutlet }) {
 
   return (
     <div className="space-y-4 pb-32 animate-in fade-in">
+      {dateFilter && (
+        <Card className="p-4">
+          <DateRangeFilter
+            activePreset={dateFilter.preset}
+            dateStart={dateFilter.dateStart}
+            dateEnd={dateFilter.dateEnd}
+            groupBy={dateFilter.groupBy}
+            onPresetChange={dateFilter.onPresetChange}
+            onCustomChange={dateFilter.onCustomChange}
+            onGroupByChange={dateFilter.onGroupByChange}
+          />
+        </Card>
+      )}
       <div className="flex items-center justify-between px-1">
         <p className="text-xs text-slate-500 font-medium">{filtered.length} outlet ditemukan</p>
         <button onClick={() => setShowInfo(true)} className="flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-emerald-600 transition-colors">

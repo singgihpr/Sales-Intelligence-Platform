@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Upload, RefreshCw, Edit2, Trash2, Plus, Users, Database, Store, X, LogOut, ArrowLeft, Link2, Target, Award, Download, FileSpreadsheet, Search, ChevronLeft, ChevronRight, UserCheck } from 'lucide-react';
+import { Upload, RefreshCw, Edit2, Trash2, Plus, Users, Database, Store, X, LogOut, ArrowLeft, Link2, Target, Award, Download, FileSpreadsheet, Search, ChevronLeft, ChevronRight, UserCheck, Gift } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 function PaginationControls({ type, meta, onChange }) {
@@ -67,6 +67,7 @@ export default function AdminDashboard() {
     assignments: { page: 1, limit: 10, total: 0, search: '' },
     vacant: { page: 1, limit: 10, total: 0, search: '' },
     targets: { page: 1, limit: 10, total: 0, search: '' },
+    'sku-incentives': { page: 1, limit: 10, total: 0, search: '' },
   });
 
   // Form States
@@ -97,6 +98,12 @@ export default function AdminDashboard() {
   const [targetForm, setTargetForm] = useState({ user_id: '', month: new Date().getMonth()+1, year: new Date().getFullYear(), target_be: 2000 });
   const [editingTarget, setEditingTarget] = useState(null);
 
+  // SKU Incentives
+  const [skuIncentives, setSkuIncentives] = useState([]);
+  const [showSkuIncForm, setShowSkuIncForm] = useState(false);
+  const [skuIncForm, setSkuIncForm] = useState({ sku_name: '', bonus_be: 0, start_date: '', end_date: '', is_active: true, notes: '' });
+  const [editingSkuInc, setEditingSkuInc] = useState(null);
+
   const [showVacant, setShowVacant] = useState(false);
   const [previewData, setPreviewData] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -125,13 +132,14 @@ export default function AdminDashboard() {
       if (type === 'assignments') setAssignments(list);
       if (type === 'vacant') setVacantOutlets(list);
       if (type === 'targets') setTargets(list);
+      if (type === 'sku-incentives') setSkuIncentives(list);
       setPagination(prev => ({ ...prev, [type]: { ...prev[type], page, limit, total, search } }));
     } catch (e) { setMessage(`❌ Fetch ${type} error: ${e.message}`); }
   };
 
   const fetchAll = async () => {
     setLoading(true);
-    await Promise.all(['records', 'users', 'outlets', 'assignments', 'targets'].map(t => fetchTable(t)));
+    await Promise.all(['records', 'users', 'outlets', 'assignments', 'targets', 'sku-incentives'].map(t => fetchTable(t)));
     setLoading(false);
   };
 
@@ -364,6 +372,7 @@ export default function AdminDashboard() {
     { id: 'users', label: 'User Management', icon: Users },
     { id: 'assignments', label: 'Assignments', icon: Link2 },
     { id: 'targets', label: 'Bonus Targets', icon: Target },
+    { id: 'sku-incentives', label: 'Insentif SKU', icon: Gift },
     { id: 'supervisors', label: 'Supervisor Teams', icon: UserCheck }
   ];
 
@@ -927,6 +936,88 @@ export default function AdminDashboard() {
             </div>
           </div>
         )}
+
+        {activeTab === 'sku-incentives' && (
+          <div className="space-y-6">
+            {showSkuIncForm && (
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                handleCrud('sku-incentives', editingSkuInc ? 'PUT' : 'POST', editingSkuInc?.id, skuIncForm, setSkuIncentives, () => {
+                  setShowSkuIncForm(false);
+                  setSkuIncForm({ sku_name: '', bonus_be: 0, start_date: '', end_date: '', is_active: true, notes: '' });
+                  setEditingSkuInc(null);
+                });
+              }} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6 grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Nama SKU</label><input required value={skuIncForm.sku_name} onChange={e=>setSkuIncForm({...skuIncForm, sku_name:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800 text-sm" placeholder="Pisang Cavendish 9KG"/></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Bonus BE/Unit</label><input type="number" step="0.1" required value={skuIncForm.bonus_be} onChange={e=>setSkuIncForm({...skuIncForm, bonus_be:Number(e.target.value)})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800 text-sm"/></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Tgl Mulai</label><input type="date" required value={skuIncForm.start_date} onChange={e=>setSkuIncForm({...skuIncForm, start_date:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800 text-sm"/></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Tgl Selesai</label><input type="date" required value={skuIncForm.end_date} onChange={e=>setSkuIncForm({...skuIncForm, end_date:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800 text-sm"/></div>
+                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">Active</label><select value={skuIncForm.is_active ? 'true' : 'false'} onChange={e=>setSkuIncForm({...skuIncForm, is_active: e.target.value === 'true'})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800 text-sm"><option value="true">Active</option><option value="false">Inactive</option></select></div>
+                <div className="md:col-span-1 flex gap-2"><button type="submit" className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">Save</button><button type="button" onClick={()=>setShowSkuIncForm(false)} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg"><X className="w-4 h-4 mx-auto"/></button></div>
+                <div className="md:col-span-3"><label className="block text-xs font-medium text-slate-500 mb-1">Catatan</label><input value={skuIncForm.notes} onChange={e=>setSkuIncForm({...skuIncForm, notes:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800 text-sm" placeholder="Deskripsi event atau promo"/></div>
+              </form>
+            )}
+            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+                <div>
+                  <h2 className="text-lg font-bold">Insentif SKU</h2>
+                  <p className="text-xs text-slate-500 mt-1">Atur bonus BE tambahan per SKU untuk event/promo tertentu.</p>
+                </div>
+                <button onClick={()=>{
+                  setSkuIncForm({ sku_name: '', bonus_be: 0, start_date: new Date().toISOString().split('T')[0], end_date: new Date(Date.now() + 30*24*60*60*1000).toISOString().split('T')[0], is_active: true, notes: '' });
+                  setEditingSkuInc(null);
+                  setShowSkuIncForm(true);
+                }} className="flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700"><Plus className="w-4 h-4"/> Tambah Insentif</button>
+              </div>
+              <PaginationControls type="sku-incentives" meta={pagination['sku-incentives']} onChange={(t, o) => fetchTable(t, o)} />
+              <div className="overflow-x-auto"><table className="w-full text-sm text-left min-w-[700px]">
+                <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800"><tr>
+                  <th className="px-4 py-3">SKU</th>
+                  <th className="px-4 py-3">Bonus BE</th>
+                  <th className="px-4 py-3">Periode</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Dibuat Oleh</th>
+                  <th className="px-4 py-3">Catatan</th>
+                  <th className="px-4 py-3 text-right">Actions</th>
+                </tr></thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {loading ? <tr><td colSpan="7" className="px-4 py-8 text-center text-slate-400 animate-pulse">Loading...</td></tr> :
+                  skuIncentives.length === 0 ? <tr><td colSpan="7" className="px-4 py-8 text-center text-slate-400">Belum ada insentif SKU.</td></tr> :
+                  skuIncentives.map(inc => (
+                    <tr key={inc.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                      <td className="px-4 py-3 font-medium">{inc.sku_name}</td>
+                      <td className="px-4 py-3 font-bold text-emerald-600">+{parseFloat(inc.bonus_be).toFixed(1)} BE</td>
+                      <td className="px-4 py-3 text-xs">{inc.start_date ? new Date(inc.start_date).toLocaleDateString('id-ID') : '-'} s/d {inc.end_date ? new Date(inc.end_date).toLocaleDateString('id-ID') : '-'}</td>
+                      <td className="px-4 py-3">
+                        {(() => {
+                          const now = new Date(); const start = new Date(inc.start_date); const end = new Date(inc.end_date);
+                          const isActiveNow = inc.is_active && now >= start && now <= end;
+                          const isFuture = now < start;
+                          const isPast = now > end;
+                          let badge = '';
+                          if (!inc.is_active) badge = 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400';
+                          else if (isActiveNow) badge = 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400';
+                          else if (isFuture) badge = 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400';
+                          else badge = 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400';
+                          return <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${badge}`}>
+                            {!inc.is_active ? 'Nonaktif' : isActiveNow ? 'Aktif' : isFuture ? 'Mendatang' : 'Kadaluarsa'}
+                          </span>;
+                        })()}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-slate-500">{inc.created_by_name || '-'}</td>
+                      <td className="px-4 py-3 text-xs text-slate-500 max-w-[120px] truncate" title={inc.notes}>{inc.notes || '-'}</td>
+                      <td className="px-4 py-3 flex gap-2 justify-end">
+                        <button onClick={()=>{ setEditingSkuInc(inc); setSkuIncForm({ sku_name: inc.sku_name, bonus_be: inc.bonus_be, start_date: inc.start_date, end_date: inc.end_date, is_active: inc.is_active, notes: inc.notes || '' }); setShowSkuIncForm(true); }} className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg"><Edit2 className="w-4 h-4"/></button>
+                        <button onClick={()=>handleCrud('sku-incentives','DELETE',inc.id,{},()=>fetchTable('sku-incentives'),()=>{})} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg"><Trash2 className="w-4 h-4"/></button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table></div>
+            </div>
+          </div>
+        )}
+
       </main>
     </div>
   );
