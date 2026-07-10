@@ -22,35 +22,33 @@ services:
       dockerfile: Dockerfile.dev
     volumes:
       - .:/app
-      - /app/node_modules
+      - go_cache:/go/pkg/mod
+      - go_build_cache:/root/.cache/go-build
     ports:
       - "3000:3000"
     environment:
       DATABASE_URL: postgres://salesintel:${DB_PASSWORD:-devpassword}@db:5432/salesintel
       JWT_SECRET: ${JWT_SECRET:-dev-secret}
       DEFAULT_PASSWORD: ${DEFAULT_PASSWORD:-Password123!}
-      DEFAULT_USER_ID: ${DEFAULT_USER_ID:-00000000-0000-0000-0000-000000000000}
-      NODE_ENV: development
+      PORT: "3000"
     depends_on:
       db:
         condition: service_healthy
-    command: npx nodemon server/index.js --watch server --watch netlify/functions/lib
 
   web:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
+    image: node:20-alpine
+    working_dir: /app
     volumes:
       - .:/app
-      - /app/node_modules
+      - node_modules:/app/node_modules
     ports:
       - "5173:5173"
-    environment:
-      API_PROXY_TARGET: http://api:3000
     depends_on:
       - api
-    command: npm run dev
+    command: npm run dev -- --host
 
 volumes:
   postgres_dev_data:
-
+  go_cache:
+  go_build_cache:
+  node_modules:

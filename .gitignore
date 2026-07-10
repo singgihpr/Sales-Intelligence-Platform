@@ -27,3 +27,14 @@ sample_data
 # Local Netlify folder
 .netlify
 .env
+
+# Go
+tmp/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Air (Go hot-reload)
+build-errors.log

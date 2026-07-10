@@ -1,20 +1,36 @@
-# Stage 1: Build frontend
-FROM node:20-alpine AS builder
+# Stage 1: Build React frontend
+FROM node:20-alpine AS frontend
 WORKDIR /app
 COPY package*.json ./
-RUN npm install
+RUN npm ci
 COPY . .
 RUN npm run build
 
-# Stage 2: Production runtime
-FROM node:20-alpine
+# Stage 2: Build Go backend
+FROM golang:1.21-alpine AS backend
 WORKDIR /app
-COPY package*.json ./
-RUN npm install --production
-COPY server/ ./server/
-COPY netlify/functions/lib/ ./netlify/functions/lib/
+COPY go-backend/go.mod go-backend/go.sum ./
+RUN go mod download
+COPY go-backend/ .
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /server .
+
+# Stage 3: Production runtime
+FROM alpine:latest
+RUN apk --no-cache add ca-certificates tzdata
+
+WORKDIR /app
+
+# Copy Go binary
+COPY --from=backend /server ./server
+
+# Copy frontend build
+COPY --from=frontend /app/dist ./dist
+
+# Copy migrations
 COPY migrations/ ./migrations/
 
-ENV NODE_ENV=production
+ENV GIN_MODE=release
+ENV FRONTEND_DIR=./dist
 EXPOSE 3000
-CMD ["node", "server/index.js"]
+
+CMD ["./server"]
