@@ -9,7 +9,7 @@ A mobile-first sales intelligence dashboard for field teams. Built with **React 
 | Layer | Technology |
 |-------|-----------|
 | Frontend | React 19, Vite, Tailwind CSS, React Router, PWA-ready |
-| Backend | Go 1.21+ with Echo framework, pgx PostgreSQL driver |
+| Backend | Go 1.25+ with Echo framework, pgx PostgreSQL driver |
 | Database | PostgreSQL 17 — self-hosted via Docker or Neon (cloud) |
 | Auth | Custom JWT (golang-jwt) + bcrypt |
 | Excel Import | excelize (Go native, 10x faster than JS xlsx) |
@@ -20,7 +20,7 @@ A mobile-first sales intelligence dashboard for field teams. Built with **React 
 
 ## Prerequisites
 
-- **Go** 1.21+
+- **Go** 1.25+
 - **Node.js** 20+ (frontend build only)
 - **npm**
 - **Docker + Docker Compose** (for containerized deploy)

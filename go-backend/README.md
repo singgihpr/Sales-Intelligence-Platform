@@ -44,7 +44,7 @@ go-backend/
 
 ### Prerequisites
 
-- Go 1.21+
+- Go 1.25+
 - PostgreSQL 17+
 
 ### Local Development

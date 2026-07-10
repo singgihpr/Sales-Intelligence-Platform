@@ -1,5 +1,5 @@
 # Go development with air hot-reload
-FROM golang:1.21-alpine
+FROM golang:1.25-alpine
 
 RUN apk add --no-cache git
 
@@ -9,13 +9,9 @@ RUN go install github.com/air-verse/air@latest
 WORKDIR /app
 
 # Copy go.mod/go.sum first for caching
-COPY go-backend/go.mod go-backend/go.sum ./
-RUN go mod download
+COPY go-backend/go.mod go-backend/go.sum ./go-backend/
+RUN cd go-backend && go mod download
 
-# Copy frontend dependencies for Vite dev server
-COPY package*.json ./
-RUN npm install
-
-EXPOSE 3000 5173
+EXPOSE 3000
 
 CMD ["air", "-c", ".air.toml"]

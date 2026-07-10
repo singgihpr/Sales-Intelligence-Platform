@@ -2,10 +2,10 @@ root = "."
 tmp_dir = "tmp"
 
 [build]
-  bin = "./tmp/main"
-  cmd = "go build -o ./tmp/main ./go-backend/"
+  entrypoint = "./tmp/main"
+  cmd = "cd go-backend && go build -o ../tmp/main ."
   delay = 1000
-  exclude_dir = ["assets", "tmp", "vendor", "node_modules", "dist", ".git"]
+  exclude_dir = ["assets", "tmp", "vendor", "node_modules", "dist", ".git", "src", "netlify", "server", "scripts", "migrations", "docker", "public"]
   exclude_file = []
   exclude_regex = ["_test.go"]
   exclude_unchanged = false
