@@ -437,3 +437,19 @@ func (h *UserHandler) GetDashboard(c echo.Context) error {
 		DaysInMonth:    daysInMonth,
 	})
 }
+
+// GetAnalytics returns analytics data (same as dashboard for sales role)
+func (h *UserHandler) GetAnalytics(c echo.Context) error {
+	user := middleware.GetUser(c)
+	if user == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
+	}
+
+	// Analytics only supported for sales role
+	if user.Role != "sales" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Analytics not supported for this role"})
+	}
+
+	// Delegate to dashboard — same data, different endpoint name
+	return h.GetDashboard(c)
+}

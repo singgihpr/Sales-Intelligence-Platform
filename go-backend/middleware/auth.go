@@ -18,26 +18,34 @@ type JWTClaims struct {
 func JWTAuth(secret string) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			authHeader := c.Request().Header.Get("Authorization")
-			if authHeader == "" {
-				return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
+			_, err := VerifyJWT(c, secret)
+			if err != nil {
+				return err
 			}
-
-			tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-			claims := &JWTClaims{}
-
-			token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-				return []byte(secret), nil
-			})
-
-			if err != nil || !token.Valid {
-				return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid token"})
-			}
-
-			c.Set("user", claims)
 			return next(c)
 		}
 	}
+}
+
+func VerifyJWT(c echo.Context, secret string) (*JWTClaims, error) {
+	authHeader := c.Request().Header.Get("Authorization")
+	if authHeader == "" {
+		return nil, c.JSON(http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
+	}
+
+	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+	claims := &JWTClaims{}
+
+	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+		return []byte(secret), nil
+	})
+
+	if err != nil || !token.Valid {
+		return nil, c.JSON(http.StatusUnauthorized, map[string]string{"error": "Invalid token"})
+	}
+
+	c.Set("user", claims)
+	return claims, nil
 }
 
 func GetUser(c echo.Context) *JWTClaims {
