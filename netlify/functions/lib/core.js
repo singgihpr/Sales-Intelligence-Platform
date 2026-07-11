@@ -1207,14 +1207,15 @@ export const handler = async (event) => {
         return { statusCode: 200, body: JSON.stringify({ data: dataRes[0] || null }) };
       }
       if (type === 'users') {
+        const roleFilter = params.role ? sql` AND role = ${params.role}` : sql``;
         const dataRes = await sql`
           SELECT id, name, email, role, region, level, supervisor_id, created_at FROM users
-          WHERE (name ILIKE ${searchPattern} OR email ILIKE ${searchPattern} OR role ILIKE ${searchPattern} OR region ILIKE ${searchPattern})
+          WHERE (name ILIKE ${searchPattern} OR email ILIKE ${searchPattern} OR role ILIKE ${searchPattern} OR region ILIKE ${searchPattern})${roleFilter}
           ORDER BY created_at DESC LIMIT ${limit} OFFSET ${offset}
         `;
         const countRes = await sql`
           SELECT COUNT(*) as cnt FROM users
-          WHERE (name ILIKE ${searchPattern} OR email ILIKE ${searchPattern} OR role ILIKE ${searchPattern} OR region ILIKE ${searchPattern})
+          WHERE (name ILIKE ${searchPattern} OR email ILIKE ${searchPattern} OR role ILIKE ${searchPattern} OR region ILIKE ${searchPattern})${roleFilter}
         `;
         return paginateResponse(dataRes.map(u => ({...u, password_hash: '••••••'})), parseInt(countRes[0].cnt));
       }

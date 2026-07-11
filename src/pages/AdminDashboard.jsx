@@ -140,31 +140,33 @@ export default function AdminDashboard() {
     } catch (e) { setMessage(t('adminDashboard.messages.fetchError', { type, message: e.message })); }
   };
 
-  const fetchAll = async () => {
-    setLoading(true);
-    await Promise.all(['records', 'users', 'outlets', 'assignments', 'targets', 'sku-incentives'].map(type => fetchTable(type)));
-    setLoading(false);
-  };
-
   const fetchAllSalesUsers = async () => {
     try {
-      const res = await fetch(`/api?type=users&limit=9999&search=`, { headers: { 'Authorization': `Bearer ${token}` } });
+      const res = await fetch(`/api?type=users&role=sales&limit=100`, { headers: { 'Authorization': `Bearer ${token}` } });
       if (!res.ok) throw new Error(await res.text());
       const result = await res.json();
-      setAllSalesUsers((result.data || []).filter(u => u.role === 'sales'));
+      setAllSalesUsers(result.data || []);
     } catch (e) { /* silently ignore to avoid disrupting UI */ }
   };
 
   const fetchAllSupervisors = async () => {
     try {
-      const res = await fetch(`/api?type=users&limit=9999&search=`, { headers: { 'Authorization': `Bearer ${token}` } });
+      const res = await fetch(`/api?type=users&role=supervisor&limit=100`, { headers: { 'Authorization': `Bearer ${token}` } });
       if (!res.ok) throw new Error(await res.text());
       const result = await res.json();
-      setSupervisors((result.data || []).filter(u => u.role === 'supervisor'));
+      setSupervisors(result.data || []);
     } catch (e) { /* silently ignore */ }
   };
 
-  useEffect(() => { fetchAll(); fetchAllSalesUsers(); fetchAllSupervisors(); }, []);
+  useEffect(() => { fetchAllSalesUsers(); fetchAllSupervisors(); }, []);
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      await fetchTable(activeTab);
+      if (activeTab === 'assignments') await fetchTable('outlets');
+      setLoading(false);
+    })();
+  }, [activeTab]);
   useEffect(() => { if (showVacant) fetchTable('vacant'); }, [showVacant]);
 
   // Handle navigation state from "Kelola" button

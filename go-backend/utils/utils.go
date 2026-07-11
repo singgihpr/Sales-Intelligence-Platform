@@ -125,9 +125,18 @@ func FuzzyMatchOutlet(name string, outlets []map[string]string) *map[string]stri
 	return bestMatch
 }
 
-func CalculateOHS(beCurrent, bePrev, bePrev2 float64, freq3Mo int) (int, map[string]int) {
+type OHSResult struct {
+	Score      int
+	TotalBE    float64
+	AvgBE      float64
+	Trend      float64
+	Freq3Mo    int
+	Breakdown  map[string]int
+}
+
+func CalculateOHS(beCurrent, bePrev, bePrev2 float64, freq3Mo int) OHSResult {
 	totalBE := beCurrent + bePrev + bePrev2
-	_ = totalBE / 3 // avgBE used for future calculations
+	avgBE := totalBE / 3
 
 	trend := 0.0
 	if bePrev > 0 {
@@ -143,13 +152,18 @@ func CalculateOHS(beCurrent, bePrev, bePrev2 float64, freq3Mo int) (int, map[str
 	ohs := int(math.Round(volumeScore*0.40 + trendScore*0.40 + freqScore*0.20))
 	ohs = int(math.Max(0, math.Min(100, float64(ohs))))
 
-	breakdown := map[string]int{
-		"volume":    int(math.Round(volumeScore)),
-		"trend":     int(math.Round(trendScore)),
-		"frequency": int(math.Round(freqScore)),
+	return OHSResult{
+		Score:   ohs,
+		TotalBE: totalBE,
+		AvgBE:   avgBE,
+		Trend:   trend,
+		Freq3Mo: freq3Mo,
+		Breakdown: map[string]int{
+			"volume":    int(math.Round(volumeScore)),
+			"trend":     int(math.Round(trendScore)),
+			"frequency": int(math.Round(freqScore)),
+		},
 	}
-
-	return ohs, breakdown
 }
 
 func CalculatePercentageBonus(currentBE, targetBE float64, config map[string]interface{}) (float64, float64, map[string]interface{}) {
