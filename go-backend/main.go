@@ -69,6 +69,9 @@ func main() {
 		}
 
 		t := c.QueryParam("type")
+		if c.QueryParam("action") == "preview" {
+			return uploadHandler.PreviewExcel(c)
+		}
 		switch t {
 		case "users":
 			return userHandler.CreateUser(c)

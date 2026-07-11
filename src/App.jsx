@@ -129,7 +129,7 @@ export default function App() {
     }
   }, []);
 
-  const fetchDashboard = async () => {
+  const fetchDashboard = async (signal) => {
     setLoading(true);
     try {
       let url = '/api';
@@ -137,6 +137,7 @@ export default function App() {
         url = `/api?dateStart=${dateStart}&dateEnd=${dateEnd}&groupBy=${groupBy}`;
       }
       const res = await fetch(url, {
+        signal,
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (!res.ok) {
@@ -149,6 +150,7 @@ export default function App() {
       }
       setDashboardData(data);
     } catch (e) {
+      if (e.name === 'AbortError') return;
       setError(e.message);
     } finally {
       setLoading(false);
@@ -156,9 +158,14 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (token) fetchDashboard();
-    const interval = setInterval(fetchDashboard, 30000);
-    return () => clearInterval(interval);
+    if (!token) return;
+    const controller = new AbortController();
+    fetchDashboard(controller.signal);
+    const interval = setInterval(() => fetchDashboard(new AbortController().signal), 30000);
+    return () => {
+      controller.abort();
+      clearInterval(interval);
+    };
   }, [token, dateStart, dateEnd, groupBy]);
 
   const navigateToOutlet = (outlet) => {

@@ -214,6 +214,33 @@ type NewOutlet struct {
 	Type string `json:"type"`
 }
 
+type TeamMember struct {
+	User
+	CurrentBE     float64            `json:"currentBE"`
+	TargetBE      float64            `json:"targetBE"`
+	Attainment    float64            `json:"attainment"`
+	TotalBonus    float64            `json:"totalBonus"`
+	TotalAssigned int                `json:"totalAssigned"`
+	ActiveCount   int                `json:"activeCount"`
+	PercentageResult interface{}     `json:"percentageResult"`
+	VolumeResult     interface{}     `json:"volumeResult"`
+	ActiveResult     interface{}     `json:"activeResult"`
+}
+
+type TeamStats struct {
+	TotalTeamBE    float64 `json:"totalTeamBE"`
+	TotalTarget    float64 `json:"totalTarget"`
+	TeamAttainment float64 `json:"teamAttainment"`
+	VacantOutlets  int     `json:"vacantOutlets"`
+}
+
+type TeamDashboardData struct {
+	Team           []TeamMember      `json:"team"`
+	TeamStats      TeamStats         `json:"teamStats"`
+	SKUPerformance []SKUPerformance  `json:"skuPerformance"`
+	Outlets        []OutletHealth    `json:"outlets"`
+}
+
 type UserDashboardData struct {
 	User           User              `json:"user"`
 	DateRange      DateRange         `json:"dateRange"`

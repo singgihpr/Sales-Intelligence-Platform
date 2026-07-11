@@ -52,6 +52,7 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('records');
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
+  const [messageType, setMessageType] = useState('');
   const [records, setRecords] = useState([]);
   const [users, setUsers] = useState([]);
   const [outlets, setOutlets] = useState([]);
@@ -62,6 +63,8 @@ export default function AdminDashboard() {
   const [supervisors, setSupervisors] = useState([]);
   const [selectedSupId, setSelectedSupId] = useState('');
   const [checkedSalesmen, setCheckedSalesmen] = useState([]);
+
+  const [recordFilters, setRecordFilters] = useState({ dateStart: '', dateEnd: '', salesId: '', outletId: '' });
 
   const [pagination, setPagination] = useState({
     records: { page: 1, limit: 10, total: 0, search: '' },
@@ -122,7 +125,14 @@ export default function AdminDashboard() {
     const search = overrides.search !== undefined ? overrides.search : p.search;
     const isVacant = type === 'vacant';
     const urlType = isVacant ? 'assignments' : type;
-    const url = `/api?type=${urlType}${isVacant ? '&mode=vacant' : ''}&page=${page}&limit=${limit}&search=${encodeURIComponent(search)}`;
+    let url = `/api?type=${urlType}${isVacant ? '&mode=vacant' : ''}&page=${page}&limit=${limit}&search=${encodeURIComponent(search)}`;
+    if (type === 'records') {
+      const f = recordFilters;
+      if (f.dateStart) url += `&dateStart=${f.dateStart}`;
+      if (f.dateEnd) url += `&dateEnd=${f.dateEnd}`;
+      if (f.salesId) url += `&salesId=${f.salesId}`;
+      if (f.outletId) url += `&outletId=${f.outletId}`;
+    }
     try {
       const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
       if (!res.ok) throw new Error(await res.text());
@@ -137,7 +147,7 @@ export default function AdminDashboard() {
       if (type === 'targets') setTargets(list);
       if (type === 'sku-incentives') setSkuIncentives(list);
       setPagination(prev => ({ ...prev, [type]: { ...prev[type], page, limit, total, search } }));
-    } catch (e) { setMessage(t('adminDashboard.messages.fetchError', { type, message: e.message })); }
+    } catch (e) { setMessage(t('adminDashboard.messages.fetchError', { type, message: e.message })); setMessageType('error'); }
   };
 
   const fetchAllSalesUsers = async () => {
@@ -158,7 +168,7 @@ export default function AdminDashboard() {
     } catch (e) { /* silently ignore */ }
   };
 
-  useEffect(() => { fetchAllSalesUsers(); fetchAllSupervisors(); }, []);
+  useEffect(() => { fetchAllSalesUsers(); fetchAllSupervisors(); fetchTable('outlets', { page: 1, limit: 100, search: '' }); }, []);
   useEffect(() => {
     (async () => {
       setLoading(true);
@@ -168,6 +178,7 @@ export default function AdminDashboard() {
     })();
   }, [activeTab]);
   useEffect(() => { if (showVacant) fetchTable('vacant'); }, [showVacant]);
+  useEffect(() => { if (activeTab === 'records') fetchTable('records', { page: 1 }); }, [recordFilters]);
 
   // Handle navigation state from "Kelola" button
   useEffect(() => {
@@ -199,18 +210,18 @@ export default function AdminDashboard() {
         await Promise.all([fetchAllSupervisors(), fetchAllSalesUsers()]);
       }
       resetState();
-      setMessage(t('adminDashboard.messages.crudSuccess', { type, action: t('adminDashboard.crud.' + method) }));
-    } catch (e) { setMessage(t('adminDashboard.messages.error', { message: e.message })); }
+      setMessage(t('adminDashboard.messages.crudSuccess', { type, action: t('adminDashboard.crud.' + method) })); setMessageType('success');
+    } catch (e) { setMessage(t('adminDashboard.messages.error', { message: e.message })); setMessageType('error'); }
   };
 
   // Inline assignment for single vacant outlet
   const handleInlineAssign = async (outletId, salesmanId) => {
     if (!salesmanId) {
-      setMessage(t('adminDashboard.messages.selectSalesmanFirst'));
+      setMessage(t('adminDashboard.messages.selectSalesmanFirst')); setMessageType('error');
       return;
     }
     setAssigningOutlets(prev => new Set(prev).add(outletId));
-    setMessage('');
+    setMessage(''); setMessageType('');
     try {
       const url = `/api?type=assignments`;
       const res = await fetch(url, {
@@ -221,11 +232,11 @@ export default function AdminDashboard() {
       if (!res.ok) throw new Error(await res.text());
       await fetchTable('vacant');
       await fetchTable('assignments');
-      setMessage(t('adminDashboard.messages.outletAssigned'));
+      setMessage(t('adminDashboard.messages.outletAssigned')); setMessageType('success');
       // Remove from selected if it was selected
       setSelectedVacantIds(prev => prev.filter(id => id !== outletId));
     } catch (e) {
-      setMessage(t('adminDashboard.messages.error', { message: e.message }));
+      setMessage(t('adminDashboard.messages.error', { message: e.message })); setMessageType('error');
     } finally {
       setAssigningOutlets(prev => {
         const next = new Set(prev);
@@ -238,16 +249,16 @@ export default function AdminDashboard() {
   // Bulk assignment for multiple vacant outlets
   const handleBulkAssign = async () => {
     if (!bulkSalesmanId) {
-      setMessage(t('adminDashboard.messages.selectSalesmanBulk'));
+      setMessage(t('adminDashboard.messages.selectSalesmanBulk')); setMessageType('error');
       return;
     }
     if (selectedVacantIds.length === 0) {
-      setMessage(t('adminDashboard.messages.noOutletsSelected'));
+      setMessage(t('adminDashboard.messages.noOutletsSelected')); setMessageType('error');
       return;
     }
     setBulkAssigning(true);
     setBulkProgress({ current: 0, total: selectedVacantIds.length });
-    setMessage('');
+    setMessage(''); setMessageType('');
     let success = 0;
     let failed = 0;
     for (let i = 0; i < selectedVacantIds.length; i++) {
@@ -274,9 +285,9 @@ export default function AdminDashboard() {
     setBulkAssigning(false);
     setBulkProgress({ current: 0, total: 0 });
     if (failed === 0) {
-      setMessage(t('adminDashboard.messages.assignedSuccess', { success }));
+      setMessage(t('adminDashboard.messages.assignedSuccess', { success })); setMessageType('success');
     } else {
-      setMessage(t('adminDashboard.messages.assignResult', { success, failed }));
+      setMessage(t('adminDashboard.messages.assignResult', { success, failed })); setMessageType(failed > 0 ? 'error' : 'success');
     }
   };
 
@@ -305,31 +316,31 @@ export default function AdminDashboard() {
   };
 
   const handlePreview = async () => {
-    if (!uploadFile) { setMessage(t('adminDashboard.messages.selectFileFirst')); return; }
+    if (!uploadFile) { setMessage(t('adminDashboard.messages.selectFileFirst')); setMessageType('error'); return; }
     setPreviewLoading(true);
-    setMessage('');
+    setMessage(''); setMessageType('');
     const fd = new FormData(); fd.append('file', uploadFile);
     try {
       const res = await fetch('/api?action=preview', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: fd });
       if (!res.ok) throw new Error(await res.text());
       const d = await res.json();
       setPreviewData(d);
-      setMessage(t('adminDashboard.messages.previewSummary', { valid: d.valid, invalid: d.invalid, total: d.total }));
-    } catch (e) { setMessage(t('adminDashboard.messages.previewFailed', { message: e.message })); }
+      setMessage(t('adminDashboard.messages.previewSummary', { valid: d.valid, invalid: d.invalid, total: d.total })); setMessageType('success');
+    } catch (e) { setMessage(t('adminDashboard.messages.previewFailed', { message: e.message })); setMessageType('error'); }
     finally { setPreviewLoading(false); }
   };
 
   const handleUpload = async () => {
-    if (!uploadFile) { setMessage(t('adminDashboard.messages.selectFileFirst')); return; }
+    if (!uploadFile) { setMessage(t('adminDashboard.messages.selectFileFirst')); setMessageType('error'); return; }
     if (uploadLoading) return;
     setUploadLoading(true);
-    setMessage('');
+    setMessage(''); setMessageType('');
     const fd = new FormData(); fd.append('file', uploadFile);
     try {
       const res = await fetch('/api', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: fd });
       if (!res.ok) throw new Error(res.status);
-      const d = await res.json(); setMessage(t('adminDashboard.messages.uploadedRecords', { inserted: d.inserted }) + (d.assignmentsCreated ? ' ' + t('adminDashboard.messages.outletsAssigned', { count: d.assignmentsCreated }) : '') + (d.assignmentsUpdated ? ' ' + t('adminDashboard.messages.reassigned', { count: d.assignmentsUpdated }) : '')); await fetchTable('records'); setPreviewData(null); setUploadFile(null);
-    } catch(e) { setMessage(t('adminDashboard.messages.uploadFailed')); }
+      const d = await res.json(); setMessage(t('adminDashboard.messages.uploadedRecords', { inserted: d.inserted }) + (d.assignmentsCreated ? ' ' + t('adminDashboard.messages.outletsAssigned', { count: d.assignmentsCreated }) : '') + (d.assignmentsUpdated ? ' ' + t('adminDashboard.messages.reassigned', { count: d.assignmentsUpdated }) : '')); setMessageType('success'); await fetchTable('records'); setPreviewData(null); setUploadFile(null);
+    } catch(e) { setMessage(t('adminDashboard.messages.uploadFailed')); setMessageType('error'); }
     finally { setUploadLoading(false); }
   };
 
@@ -409,7 +420,7 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {message && <div className="max-w-[1400px] mx-auto px-6 lg:px-10 mt-4"><div className={`p-3 rounded-lg text-sm font-medium ${message.includes('✅') ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400' : 'bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-400'}`}>{message} <button onClick={() => setMessage('')} className="ml-2 underline">{t('adminDashboard.common.dismiss')}</button></div></div>}
+      {message && <div className="max-w-[1400px] mx-auto px-6 lg:px-10 mt-4"><div className={`p-3 rounded-lg text-sm font-medium ${messageType === 'success' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400' : 'bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-400'}`}>{message} <button onClick={() => { setMessage(''); setMessageType(''); }} className="ml-2 underline">{t('adminDashboard.common.dismiss')}</button></div></div>}
 
       <main className="max-w-[1400px] mx-auto px-6 lg:px-10 py-6">
         {activeTab === 'records' && (
@@ -465,7 +476,7 @@ export default function AdminDashboard() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                      {previewData.rows.map((r, idx) => (
+                      {(previewData.rows || []).map((r, idx) => (
                         <tr key={idx} className={r.isNewOutlet ? 'bg-amber-50/30 dark:bg-amber-950/10 hover:bg-slate-50 dark:hover:bg-slate-800/50' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'}>
                           <td className="px-3 py-2 font-mono text-xs text-slate-400">{r.row}</td>
                           <td className="px-3 py-2">
@@ -517,6 +528,13 @@ export default function AdminDashboard() {
                 <button onClick={() => fetchTable('records')} disabled={loading} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"><RefreshCw className={`w-4 h-4 ${loading?'animate-spin':''}`}/></button>
               </div>
               <PaginationControls type="records" meta={pagination.records} onChange={(t, o) => fetchTable(t, o)} />
+              <div className="flex flex-wrap gap-3 mb-4 mt-2">
+                <div><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.date')} {t('adminDashboard.common.from')}</label><input type="date" value={recordFilters.dateStart} onChange={e=>setRecordFilters(f=>({...f, dateStart:e.target.value}))} className="px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent text-sm" /></div>
+                <div><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.date')} {t('adminDashboard.common.to')}</label><input type="date" value={recordFilters.dateEnd} onChange={e=>setRecordFilters(f=>({...f, dateEnd:e.target.value}))} className="px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent text-sm" /></div>
+                <div><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.sales')}</label><select value={recordFilters.salesId} onChange={e=>setRecordFilters(f=>({...f, salesId:e.target.value}))} className="px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800 text-sm"><option value="">All</option>{allSalesUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}</select></div>
+                <div><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.outlet')}</label><select value={recordFilters.outletId} onChange={e=>setRecordFilters(f=>({...f, outletId:e.target.value}))} className="px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800 text-sm"><option value="">All</option>{outlets.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}</select></div>
+                <div className="flex items-end"><button onClick={() => { setRecordFilters({ dateStart: '', dateEnd: '', salesId: '', outletId: '' }); setTimeout(() => fetchTable('records'), 0); }} className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-lg">{t('adminDashboard.common.reset')}</button></div>
+              </div>
               <div className="overflow-x-auto"><table className="w-full text-sm text-left min-w-[700px]">
                 <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800"><tr><th className="px-4 py-3">{t('adminDashboard.common.outlet')}</th><th className="px-4 py-3">{t('adminDashboard.common.sales')}</th><th className="px-4 py-3">{t('adminDashboard.common.date')}</th><th className="px-4 py-3">{t('adminDashboard.common.sku')}</th><th className="px-4 py-3">{t('adminDashboard.records.previewHeaders.volume')}</th><th className="px-4 py-3 text-right">{t('adminDashboard.common.actions')}</th></tr></thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -805,8 +823,8 @@ export default function AdminDashboard() {
                                         });
                                         if (!res.ok) throw new Error(await res.text());
                                         await Promise.all([fetchAllSalesUsers(), fetchAllSupervisors()]);
-                                        setMessage(t('adminDashboard.messages.unassignedFromSupervisor', { name: u.name }));
-                                      } catch (e) { setMessage(t('adminDashboard.messages.error', { message: e.message })); }
+                                        setMessage(t('adminDashboard.messages.unassignedFromSupervisor', { name: u.name })); setMessageType('success');
+                                      } catch (e) { setMessage(t('adminDashboard.messages.error', { message: e.message })); setMessageType('error'); }
                                     }}
                                     className="px-3 py-1.5 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded-lg text-xs font-bold"
                                   >
@@ -852,8 +870,8 @@ export default function AdminDashboard() {
                         </div>
                         <button
                           onClick={async () => {
-                            if (checkedSalesmen.length === 0) { setMessage(t('adminDashboard.messages.noSalesmenSelected')); return; }
-                            setMessage('');
+                            if (checkedSalesmen.length === 0) { setMessage(t('adminDashboard.messages.noSalesmenSelected')); setMessageType('error'); return; }
+                            setMessage(''); setMessageType('');
                             let success = 0, failed = 0;
                             for (const sid of checkedSalesmen) {
                               const salesUser = allSalesUsers.find(u => u.id === sid);
@@ -870,7 +888,7 @@ export default function AdminDashboard() {
                             }
                             await Promise.all([fetchAllSalesUsers(), fetchAllSupervisors()]);
                             setCheckedSalesmen([]);
-                            setMessage(success > 0 ? t('adminDashboard.messages.assignResult', { success, failed }) : t('adminDashboard.messages.allFailed'));
+                            setMessage(success > 0 ? t('adminDashboard.messages.assignResult', { success, failed }) : t('adminDashboard.messages.allFailed')); setMessageType(success > 0 && failed === 0 ? 'success' : 'error');
                           }}
                           disabled={checkedSalesmen.length === 0}
                           className="mt-4 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"

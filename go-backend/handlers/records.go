@@ -26,19 +26,47 @@ func (h *RecordHandler) ListRecords(c echo.Context) error {
 	offset := (page - 1) * limit
 	search := c.QueryParam("search")
 	searchPattern := "%" + search + "%"
+	dateStart := c.QueryParam("dateStart")
+	dateEnd := c.QueryParam("dateEnd")
+	salesId := c.QueryParam("salesId")
+	outletId := c.QueryParam("outletId")
 
 	ctx := context.Background()
 
-	rows, err := db.Pool.Query(ctx,
-		`SELECT sr.id, o.name as outlet, u.name as sales, sr.record_date::text as date,
-		        sr.volume_be as be, sr.sku_name as sku, sr.outlet_id, sr.sales_id
-		 FROM sales_records sr
-		 LEFT JOIN outlets o ON sr.outlet_id = o.id
-		 LEFT JOIN users u ON sr.sales_id = u.id
-		 WHERE o.name ILIKE $1 OR u.name ILIKE $1 OR sr.sku_name ILIKE $1
-		 ORDER BY sr.record_date DESC LIMIT $2 OFFSET $3`,
-		searchPattern, limit, offset,
-	)
+	where := `(o.name ILIKE $1 OR u.name ILIKE $1 OR sr.sku_name ILIKE $1)`
+	args := []interface{}{searchPattern}
+	argIdx := 2
+
+	if dateStart != "" {
+		where += ` AND sr.record_date >= $` + strconv.Itoa(argIdx)
+		args = append(args, dateStart)
+		argIdx++
+	}
+	if dateEnd != "" {
+		where += ` AND sr.record_date <= $` + strconv.Itoa(argIdx)
+		args = append(args, dateEnd)
+		argIdx++
+	}
+	if salesId != "" {
+		where += ` AND sr.sales_id = $` + strconv.Itoa(argIdx)
+		args = append(args, salesId)
+		argIdx++
+	}
+	if outletId != "" {
+		where += ` AND sr.outlet_id = $` + strconv.Itoa(argIdx)
+		args = append(args, outletId)
+		argIdx++
+	}
+
+	query := `SELECT sr.id, o.name as outlet, u.name as sales, sr.record_date::text as date,
+	                 sr.volume_be as be, sr.sku_name as sku, sr.outlet_id, sr.sales_id
+	          FROM sales_records sr
+	          LEFT JOIN outlets o ON sr.outlet_id = o.id
+	          LEFT JOIN users u ON sr.sales_id = u.id
+	          WHERE ` + where + ` ORDER BY sr.record_date DESC LIMIT $` + strconv.Itoa(argIdx) + ` OFFSET $` + strconv.Itoa(argIdx+1)
+	args = append(args, limit, offset)
+
+	rows, err := db.Pool.Query(ctx, query, args...)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Database error"})
 	}
@@ -59,13 +87,12 @@ func (h *RecordHandler) ListRecords(c echo.Context) error {
 	}
 
 	var total int
-	db.Pool.QueryRow(ctx,
-		`SELECT COUNT(*) FROM sales_records sr
-		 LEFT JOIN outlets o ON sr.outlet_id = o.id
-		 LEFT JOIN users u ON sr.sales_id = u.id
-		 WHERE o.name ILIKE $1 OR u.name ILIKE $1 OR sr.sku_name ILIKE $1`,
-		searchPattern,
-	).Scan(&total)
+	countQuery := `SELECT COUNT(*) FROM sales_records sr
+	               LEFT JOIN outlets o ON sr.outlet_id = o.id
+	               LEFT JOIN users u ON sr.sales_id = u.id
+	               WHERE ` + where
+	countArgs := args[:len(args)-2]
+	db.Pool.QueryRow(ctx, countQuery, countArgs...).Scan(&total)
 
 	return c.JSON(http.StatusOK, models.PaginatedResponse{
 		Data:       records,

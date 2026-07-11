@@ -371,6 +371,9 @@ const dictionaries = {
         invalid: 'Tidak Valid',
         warning: 'Peringatan',
         new: 'BARU',
+        from: 'Dari',
+        to: 'Sampai',
+        reset: 'Reset',
       },
       tabs: {
         records: 'Data Records',
@@ -951,6 +954,9 @@ const dictionaries = {
         invalid: 'Invalid',
         warning: 'Warning',
         new: 'NEW',
+        from: 'From',
+        to: 'To',
+        reset: 'Reset',
       },
       tabs: {
         records: 'Data Records',

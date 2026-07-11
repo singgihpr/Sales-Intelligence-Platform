@@ -261,10 +261,379 @@ func (h *UserHandler) UpdateProfile(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]interface{}{"data": profile})
 }
 
+func (h *UserHandler) GetTeamDashboard(c echo.Context, user *middleware.JWTClaims) error {
+	ctx := context.Background()
+	month, year, start, end := utils.GetCurrentMonthRange()
+
+	var teamRows []models.User
+	if user.Role == "admin" {
+		rows, err := db.Pool.Query(ctx, `SELECT id, name, email, role, region, level FROM users WHERE role = 'sales' ORDER BY name`)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Database error"})
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var u models.User
+			if err := rows.Scan(&u.ID, &u.Name, &u.Email, &u.Role, &u.Region, &u.Level); err != nil {
+				continue
+			}
+			teamRows = append(teamRows, u)
+		}
+	} else {
+		rows, err := db.Pool.Query(ctx, `SELECT id, name, email, role, region, level FROM users WHERE role = 'sales' AND supervisor_id = $1 ORDER BY name`, user.ID)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Database error"})
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var u models.User
+			if err := rows.Scan(&u.ID, &u.Name, &u.Email, &u.Role, &u.Region, &u.Level); err != nil {
+				continue
+			}
+			teamRows = append(teamRows, u)
+		}
+	}
+
+	teamIDs := make([]string, 0, len(teamRows))
+	for _, m := range teamRows {
+		teamIDs = append(teamIDs, m.ID)
+	}
+
+	var teamData []models.TeamMember
+	var totalTeamBE, totalTarget float64
+
+	for _, member := range teamRows {
+		var target models.Target
+		err := db.Pool.QueryRow(ctx,
+			`SELECT id, target_be, percentage_config, volume_config, active_outlets_config
+			 FROM targets WHERE user_id = $1 AND month = $2 AND year = $3`,
+			member.ID, month, year,
+		).Scan(&target.ID, &target.TargetBE, &target.PercentageConfig, &target.VolumeConfig, &target.ActiveOutletsConfig)
+
+		if err == pgx.ErrNoRows {
+			level := "L2"
+			if member.Level != nil {
+				level = *member.Level
+			}
+			defaultTarget := 3499
+			if level == "L3" {
+				defaultTarget = 3500
+			}
+			pc := utils.GetDefaultPercentageConfig(level)
+			vc := utils.GetDefaultVolumeConfig()
+			ac := utils.GetDefaultActiveOutletsConfig(level)
+			err = db.Pool.QueryRow(ctx,
+				`INSERT INTO targets (id, user_id, month, year, target_be, percentage_config, volume_config, active_outlets_config)
+				 VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7)
+				 ON CONFLICT (user_id, month, year) DO UPDATE SET target_be = EXCLUDED.target_be
+				 RETURNING id, target_be, percentage_config, volume_config, active_outlets_config`,
+				member.ID, month, year, defaultTarget, pc, vc, ac,
+			).Scan(&target.ID, &target.TargetBE, &target.PercentageConfig, &target.VolumeConfig, &target.ActiveOutletsConfig)
+			if err != nil {
+				continue
+			}
+		} else if err != nil {
+			continue
+		}
+
+		var currentBE float64
+		db.Pool.QueryRow(ctx,
+			`SELECT COALESCE(SUM(volume_be), 0) FROM sales_records WHERE sales_id = $1 AND record_date >= $2 AND record_date <= $3`,
+			member.ID, start, end,
+		).Scan(&currentBE)
+
+		targetBE := float64(target.TargetBE)
+		attainment := 0.0
+		if targetBE > 0 {
+			attainment = float64(int((currentBE / targetBE) * 100))
+		}
+
+		pcMap, _ := target.PercentageConfig.(map[string]interface{})
+		vcMap, _ := target.VolumeConfig.(map[string]interface{})
+		acMap, _ := target.ActiveOutletsConfig.(map[string]interface{})
+		_, percentageBonus, _ := utils.CalculatePercentageBonus(currentBE, targetBE, pcMap)
+		volumeBonus, _ := utils.CalculateVolumeBonus(currentBE, vcMap)
+
+		var totalAssigned int
+		db.Pool.QueryRow(ctx,
+			`SELECT COUNT(*) FROM outlet_assignments oa
+			 INNER JOIN outlets o ON o.id = oa.outlet_id
+			 WHERE oa.salesman_id = $1 AND oa.unassigned_at IS NULL`,
+			member.ID,
+		).Scan(&totalAssigned)
+
+		var activeCount int
+		db.Pool.QueryRow(ctx,
+			`SELECT COUNT(*) FROM outlets o
+			 INNER JOIN outlet_assignments oa ON oa.outlet_id = o.id AND oa.salesman_id = $1 AND oa.unassigned_at IS NULL
+			 WHERE EXISTS (
+				 SELECT 1 FROM sales_records sr WHERE sr.outlet_id = o.id AND sr.sales_id = $1
+				   AND sr.record_date >= $2 AND sr.record_date <= $3
+			 )`,
+			member.ID, start, end,
+		).Scan(&activeCount)
+
+		_, activeBonus, _ := utils.CalculateActiveOutletsBonus(totalAssigned, activeCount, acMap)
+		totalBonus := percentageBonus + volumeBonus + activeBonus
+
+		totalTeamBE += currentBE
+		totalTarget += targetBE
+
+		teamData = append(teamData, models.TeamMember{
+			User:          member,
+			CurrentBE:     currentBE,
+			TargetBE:      targetBE,
+			Attainment:    attainment,
+			TotalBonus:    totalBonus,
+			TotalAssigned: totalAssigned,
+			ActiveCount:   activeCount,
+		})
+	}
+
+	var vacantCount int
+	db.Pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM outlets o
+		 WHERE NOT EXISTS (
+			 SELECT 1 FROM outlet_assignments oa WHERE oa.outlet_id = o.id AND oa.unassigned_at IS NULL
+		 )`,
+	).Scan(&vacantCount)
+
+	teamAttainment := 0.0
+	if totalTarget > 0 {
+		teamAttainment = float64(int((totalTeamBE / totalTarget) * 100))
+	}
+
+	// --- SKU Performance (aggregated across team) ---
+	skuPerformance := []models.SKUPerformance{}
+	if len(teamIDs) > 0 {
+		_, _, prevStart, prevEnd := utils.GetPreviousMonthRange(month, year, 1)
+		lastYearStart := fmt.Sprintf("%04d-%02d-01", year-1, month)
+		lastYearEnd := fmt.Sprintf("%04d-%02d-%02d", year-1, month, daysInMonthCount(year-1, month))
+
+		type skuRow struct {
+			Name             string
+			Volume           float64
+			TransactionCount int
+			AvgOrder         float64
+		}
+		var totalSkuVolume float64
+		var skuCurrentRows []skuRow
+
+		skuRows, err := db.Pool.Query(ctx,
+			`SELECT sr.sku_name, SUM(sr.volume_be) as volume, COUNT(*) as transaction_count, AVG(sr.volume_be) as avg_order
+			 FROM sales_records sr
+			 WHERE sr.record_date >= $1 AND sr.record_date <= $2
+			   AND sr.sku_name IS NOT NULL AND sr.sku_name <> ''
+			   AND sr.sales_id = ANY($3::uuid[])
+			 GROUP BY sr.sku_name ORDER BY volume DESC LIMIT 10`,
+			start, end, teamIDs,
+		)
+		if err == nil {
+			for skuRows.Next() {
+				var sr skuRow
+				if err := skuRows.Scan(&sr.Name, &sr.Volume, &sr.TransactionCount, &sr.AvgOrder); err != nil {
+					continue
+				}
+				totalSkuVolume += sr.Volume
+				skuCurrentRows = append(skuCurrentRows, sr)
+			}
+			skuRows.Close()
+		}
+
+		prevMonthMap := map[string]struct{ Volume, TxCount float64 }{}
+		pRows, err := db.Pool.Query(ctx,
+			`SELECT sr.sku_name, SUM(sr.volume_be) as volume, COUNT(*) as transaction_count
+			 FROM sales_records sr
+			 WHERE sr.record_date >= $1 AND sr.record_date <= $2
+			   AND sr.sku_name IS NOT NULL AND sr.sku_name <> ''
+			   AND sr.sales_id = ANY($3::uuid[])
+			 GROUP BY sr.sku_name`,
+			prevStart, prevEnd, teamIDs,
+		)
+		if err == nil {
+			for pRows.Next() {
+				var name string
+				var vol, txCnt float64
+				pRows.Scan(&name, &vol, &txCnt)
+				prevMonthMap[name] = struct{ Volume, TxCount float64 }{vol, txCnt}
+			}
+			pRows.Close()
+		}
+
+		lastYearMap := map[string]float64{}
+		lyRows, err := db.Pool.Query(ctx,
+			`SELECT sr.sku_name, SUM(sr.volume_be) as volume
+			 FROM sales_records sr
+			 WHERE sr.record_date >= $1 AND sr.record_date <= $2
+			   AND sr.sku_name IS NOT NULL AND sr.sku_name <> ''
+			   AND sr.sales_id = ANY($3::uuid[])
+			 GROUP BY sr.sku_name`,
+			lastYearStart, lastYearEnd, teamIDs,
+		)
+		if err == nil {
+			for lyRows.Next() {
+				var name string
+				var vol float64
+				lyRows.Scan(&name, &vol)
+				lastYearMap[name] = vol
+			}
+			lyRows.Close()
+		}
+
+		topOutletMap := map[string]struct{ Name string; Volume float64 }{}
+		toRows, err := db.Pool.Query(ctx,
+			`SELECT DISTINCT ON (sr.sku_name) sr.sku_name, o.name as outlet_name, SUM(sr.volume_be) as outlet_volume
+			 FROM sales_records sr
+			 LEFT JOIN outlets o ON o.id = sr.outlet_id
+			 WHERE sr.record_date >= $1 AND sr.record_date <= $2
+			   AND sr.sku_name IS NOT NULL AND sr.sku_name <> ''
+			   AND sr.sales_id = ANY($3::uuid[])
+			 GROUP BY sr.sku_name, o.name
+			 ORDER BY sr.sku_name, outlet_volume DESC`,
+			start, end, teamIDs,
+		)
+		if err == nil {
+			for toRows.Next() {
+				var skuName, outletName string
+				var outletVol float64
+				toRows.Scan(&skuName, &outletName, &outletVol)
+				topOutletMap[skuName] = struct{ Name string; Volume float64 }{outletName, outletVol}
+			}
+			toRows.Close()
+		}
+
+		for _, sr := range skuCurrentRows {
+			prevData := prevMonthMap[sr.Name]
+			prev := prevData.Volume
+			lastY := lastYearMap[sr.Name]
+			momTrend := 0.0
+			if prev > 0 {
+				momTrend = ((sr.Volume - prev) / prev) * 100
+			} else if sr.Volume > 0 {
+				momTrend = 100
+			}
+			yoyTrend := 0.0
+			if lastY > 0 {
+				yoyTrend = ((sr.Volume - lastY) / lastY) * 100
+			} else if sr.Volume > 0 {
+				yoyTrend = 100
+			}
+			topOD := topOutletMap[sr.Name]
+			topOutletContrib := 0.0
+			if sr.Volume > 0 {
+				topOutletContrib = float64(int((topOD.Volume / sr.Volume) * 100))
+			}
+			mixPercent := 0.0
+			if totalSkuVolume > 0 {
+				mixPercent = (sr.Volume / totalSkuVolume) * 100
+			}
+
+			skuPerformance = append(skuPerformance, models.SKUPerformance{
+				Name:                 sr.Name,
+				Volume:               sr.Volume,
+				TransactionCount:     sr.TransactionCount,
+				AvgOrder:             sr.AvgOrder,
+				TopOutlet:            topOD.Name,
+				TopOutletVolume:      topOD.Volume,
+				TopOutletContrib:     int(topOutletContrib),
+				MixPercent:           mixPercent,
+				MoMTrend:             momTrend,
+				YoYTrend:             yoyTrend,
+				PrevVolume:           prev,
+				PrevTransactionCount: int(prevData.TxCount),
+			})
+		}
+	}
+
+	// --- Outlet Health ---
+	outlets := []models.OutletHealth{}
+	if len(teamIDs) > 0 {
+		_, _, prevStart, prevEnd := utils.GetPreviousMonthRange(month, year, 1)
+		_, _, prev2Start, prev2End := utils.GetPreviousMonthRange(month, year, 2)
+
+		olRows, err := db.Pool.Query(ctx,
+			`SELECT o.id, o.name, o.type, o.address, o.contact_person, o.branch_area,
+				COALESCE(SUM(CASE WHEN sr.record_date >= $1 AND sr.record_date <= $2 THEN sr.volume_be ELSE 0 END), 0) as be_current,
+				COALESCE(SUM(CASE WHEN sr.record_date >= $3 AND sr.record_date <= $4 THEN sr.volume_be ELSE 0 END), 0) as be_prev,
+				COALESCE(SUM(CASE WHEN sr.record_date >= $5 AND sr.record_date <= $6 THEN sr.volume_be ELSE 0 END), 0) as be_prev2,
+				COALESCE(SUM(CASE WHEN sr.record_date >= $1 AND sr.record_date <= $2 THEN 1 ELSE 0 END), 0) as freq_3mo,
+				MAX(sr.record_date) as last_order
+			 FROM outlets o
+			 LEFT JOIN sales_records sr ON sr.outlet_id = o.id AND sr.sales_id = ANY($7::uuid[])
+			 GROUP BY o.id, o.name, o.type, o.address, o.contact_person, o.branch_area`,
+			start, end, prevStart, prevEnd, prev2Start, prev2End, teamIDs,
+		)
+		if err == nil {
+			defer olRows.Close()
+			now := time.Now()
+			for olRows.Next() {
+				var oType string
+				var beCurrent, bePrev, bePrev2 float64
+				var freq3Mo int
+				var lastOrder *time.Time
+				var ol models.OutletHealth
+				if err := olRows.Scan(&ol.ID, &ol.Name, &oType, &ol.Address, &ol.Contact, &ol.BranchArea,
+					&beCurrent, &bePrev, &bePrev2, &freq3Mo, &lastOrder); err != nil {
+					continue
+				}
+				ol.Type = oType
+				ohs := utils.CalculateOHS(beCurrent, bePrev, bePrev2, freq3Mo)
+				ol.Health = ohs.Score
+				ol.TotalBE3Mo = ohs.TotalBE
+				ol.AvgBE = ohs.AvgBE
+				ol.Trend = ohs.Trend
+				ol.Freq3Mo = ohs.Freq3Mo
+				ol.HealthBreakdown = struct {
+					Volume    int `json:"volume"`
+					Trend     int `json:"trend"`
+					Frequency int `json:"frequency"`
+				}{
+					Volume:    ohs.Breakdown["volume"],
+					Trend:     ohs.Breakdown["trend"],
+					Frequency: ohs.Breakdown["frequency"],
+				}
+				daysSince := 99
+				if lastOrder != nil {
+					daysSince = int(now.Sub(*lastOrder).Hours() / 24)
+				}
+				if daysSince == 0 {
+					ol.LastOrder = "Today"
+				} else {
+					ol.LastOrder = fmt.Sprintf("%d days ago", daysSince)
+				}
+				if ohs.Score < 40 {
+					s := "Unhealthy Outlet"
+					ol.Alert = &s
+				} else if ohs.Score < 70 {
+					s := "Needs Attention"
+					ol.Alert = &s
+				}
+				outlets = append(outlets, ol)
+			}
+		}
+	}
+
+	return c.JSON(http.StatusOK, models.TeamDashboardData{
+		Team: teamData,
+		TeamStats: models.TeamStats{
+			TotalTeamBE:    totalTeamBE,
+			TotalTarget:    totalTarget,
+			TeamAttainment: teamAttainment,
+			VacantOutlets:  vacantCount,
+		},
+		SKUPerformance: skuPerformance,
+		Outlets:        outlets,
+	})
+}
+
 func (h *UserHandler) GetDashboard(c echo.Context) error {
 	user := middleware.GetUser(c)
 	if user == nil {
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Unauthorized"})
+	}
+
+	if user.Role == "admin" || user.Role == "supervisor" {
+		return h.GetTeamDashboard(c, user)
 	}
 
 	ctx := context.Background()
