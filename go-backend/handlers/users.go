@@ -208,9 +208,28 @@ func (h *UserHandler) DeleteUser(c echo.Context) error {
 	}
 
 	ctx := context.Background()
-	_, err := db.Pool.Exec(ctx, `DELETE FROM users WHERE id = $1`, id)
+	tx, err := db.Pool.Begin(ctx)
 	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Database error"})
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err := tx.Exec(ctx, `DELETE FROM targets WHERE user_id = $1`, id); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to delete targets"})
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM sales_records WHERE sales_id = $1`, id); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to delete sales records"})
+	}
+	if _, err := tx.Exec(ctx, `UPDATE outlet_assignments SET assigned_by = NULL WHERE assigned_by = $1`, id); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to update assignments"})
+	}
+
+	if _, err := tx.Exec(ctx, `DELETE FROM users WHERE id = $1`, id); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to delete user"})
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to commit"})
 	}
 
 	return c.JSON(http.StatusOK, map[string]bool{"success": true})

@@ -455,7 +455,7 @@ export default function AdminDashboard() {
             {previewData && (
               <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-bold">{t('adminDashboard.records.previewTitle')}</h2>
+                  <h2 className="text-lg font-bold text-slate-900 dark:text-white">{t('adminDashboard.records.previewTitle')}</h2>
                   <div className="flex items-center gap-3">
                     <span className="text-xs font-medium text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 px-2 py-1 rounded-full">{t('adminDashboard.records.validCount', { count: previewData.valid })}</span>
                     <span className="text-xs font-medium text-red-600 bg-red-50 dark:bg-red-950/30 px-2 py-1 rounded-full">{t('adminDashboard.records.invalidCount', { count: previewData.invalid })}</span>
@@ -524,7 +524,7 @@ export default function AdminDashboard() {
 
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-bold">{t('adminDashboard.records.title')}</h2>
+                <h2 className="text-lg font-bold text-slate-900 dark:text-white">{t('adminDashboard.records.title')}</h2>
                 <button onClick={() => fetchTable('records')} disabled={loading} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"><RefreshCw className={`w-4 h-4 ${loading?'animate-spin':''}`}/></button>
               </div>
               <PaginationControls type="records" meta={pagination.records} onChange={(t, o) => fetchTable(t, o)} />
@@ -564,7 +564,7 @@ export default function AdminDashboard() {
             )}
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-                <h2 className="text-lg font-bold">{t('adminDashboard.outlets.title')}</h2>
+                <h2 className="text-lg font-bold text-slate-900 dark:text-white">{t('adminDashboard.outlets.title')}</h2>
                 <button onClick={()=>openOutletEdit()} className="flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700"><Plus className="w-4 h-4"/> {t('adminDashboard.outlets.add')}</button>
               </div>
               <PaginationControls type="outlets" meta={pagination.outlets} onChange={(t, o) => fetchTable(t, o)} />
@@ -599,7 +599,7 @@ export default function AdminDashboard() {
             )}
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-                <h2 className="text-lg font-bold">{t('adminDashboard.users.title')}</h2>
+                <h2 className="text-lg font-bold text-slate-900 dark:text-white">{t('adminDashboard.users.title')}</h2>
                 <button onClick={()=>openUserEdit()} className="flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700"><Plus className="w-4 h-4"/> {t('adminDashboard.users.add')}</button>
               </div>
               <PaginationControls type="users" meta={pagination.users} onChange={(t, o) => fetchTable(t, o)} />
@@ -614,7 +614,7 @@ export default function AdminDashboard() {
                     <td className="px-4 py-3"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${u.role==='admin'?'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-400':u.role==='supervisor'?'bg-blue-100 text-blue-700':'bg-emerald-100 text-emerald-700'}`}>{u.role}</span></td>
                     <td className="px-4 py-3 text-slate-500">{u.level||'-'}</td>
                     <td className="px-4 py-3 text-slate-500">{u.region||'-'}</td>
-                    <td className="px-4 py-3 flex gap-2 justify-end"><button onClick={()=>openUserEdit(u)} className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg"><Edit2 className="w-4 h-4"/></button><button onClick={()=>handleCrud('users','DELETE',u.id,{},setUsers,()=>{})} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg"><Trash2 className="w-4 h-4"/></button></td>
+                    <td className="px-4 py-3 flex gap-2 justify-end"><button onClick={()=>openUserEdit(u)} className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg"><Edit2 className="w-4 h-4"/></button><button onClick={()=>{if(window.confirm(t('adminDashboard.messages.confirmDelete'))) handleCrud('users','DELETE',u.id,{},setUsers,()=>{})}} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg"><Trash2 className="w-4 h-4"/></button></td>
                   </tr>))}
                 </tbody>
               </table></div>
@@ -647,7 +647,7 @@ export default function AdminDashboard() {
             )}
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-                <h2 className="text-lg font-bold">{t('adminDashboard.assignments.title')}</h2>
+                <h2 className="text-lg font-bold text-slate-900 dark:text-white">{t('adminDashboard.assignments.title')}</h2>
                 <div className="flex gap-2">
                   <button onClick={()=>setShowVacant(!showVacant)} className={`px-3 py-2 rounded-lg text-sm font-medium ${showVacant?'bg-amber-100 text-amber-700':'bg-slate-100 text-slate-600'}`}>{showVacant?t('adminDashboard.assignments.hideVacant'):t('adminDashboard.assignments.showVacant')}</button>
                 </div>
@@ -778,7 +778,7 @@ export default function AdminDashboard() {
         {activeTab === 'supervisors' && (
           <div className="space-y-6">
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6 space-y-4">
-              <h2 className="text-lg font-bold text-slate-500">{t('adminDashboard.tabs.supervisors')}</h2>
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">{t('adminDashboard.tabs.supervisors')}</h2>
               <div className="flex flex-col sm:flex-row gap-4 items-end">
                 <div className="w-full sm:w-auto">
                   <label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.supervisors.selectSupervisor')}</label>
@@ -921,7 +921,7 @@ export default function AdminDashboard() {
             )}
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-                <h2 className="text-lg font-bold">{t('adminDashboard.targets.title')}</h2>
+                <h2 className="text-lg font-bold text-slate-900 dark:text-white">{t('adminDashboard.targets.title')}</h2>
                 <button onClick={()=>openTargetEdit()} className="flex items-center gap-2 px-3 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700"><Plus className="w-4 h-4"/> {t('adminDashboard.targets.add')}</button>
               </div>
               <PaginationControls type="targets" meta={pagination.targets} onChange={(t, o) => fetchTable(t, o)} />
@@ -975,7 +975,7 @@ export default function AdminDashboard() {
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
                 <div>
-                  <h2 className="text-lg font-bold">{t('adminDashboard.skuIncentives.title')}</h2>
+                  <h2 className="text-lg font-bold text-slate-900 dark:text-white">{t('adminDashboard.skuIncentives.title')}</h2>
                   <p className="text-xs text-slate-500 mt-1">{t('adminDashboard.skuIncentives.subtitle')}</p>
                 </div>
                 <button onClick={()=>{

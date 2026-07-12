@@ -408,6 +408,7 @@ const dictionaries = {
         unassignedFromSupervisor: '{{name}} berhasil dilepas dari supervisor',
         noSalesmenSelected: 'Tidak ada salesman yang dipilih',
         allFailed: 'Semua gagal',
+        confirmDelete: 'Yakin ingin menghapus user ini?',
       },
       crud: {
         POST: 'dibuat',
@@ -991,6 +992,7 @@ const dictionaries = {
         unassignedFromSupervisor: '{{name}} unassigned from supervisor',
         noSalesmenSelected: 'No salesmen selected',
         allFailed: 'All failed',
+        confirmDelete: 'Are you sure you want to delete this user?',
       },
       crud: {
         POST: 'created',
