@@ -33,7 +33,10 @@ func (h *TargetHandler) ListTargets(c echo.Context) error {
 
 	if userID != "" {
 		rows, err := db.Pool.Query(ctx,
-			`SELECT t.*, u.name as user_name FROM targets t
+			`SELECT t.id, t.user_id, t.month, t.year, t.target_be,
+			        t.percentage_config, t.volume_config, t.active_outlets_config,
+			        u.name as user_name
+			 FROM targets t
 			 LEFT JOIN users u ON t.user_id = u.id
 			 WHERE t.user_id = $1
 			   AND (u.name ILIKE $2 OR CAST(t.month AS TEXT) ILIKE $2 OR CAST(t.year AS TEXT) ILIKE $2)
@@ -79,7 +82,10 @@ func (h *TargetHandler) ListTargets(c echo.Context) error {
 	}
 
 	rows, err := db.Pool.Query(ctx,
-		`SELECT t.*, u.name as user_name FROM targets t
+		`SELECT t.id, t.user_id, t.month, t.year, t.target_be,
+		        t.percentage_config, t.volume_config, t.active_outlets_config,
+		        u.name as user_name
+		 FROM targets t
 		 LEFT JOIN users u ON t.user_id = u.id
 		 WHERE (u.name ILIKE $1 OR u.email ILIKE $1 OR CAST(t.month AS TEXT) ILIKE $1 OR CAST(t.year AS TEXT) ILIKE $1)
 		 ORDER BY t.year DESC, t.month DESC LIMIT $2 OFFSET $3`,

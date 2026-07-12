@@ -349,7 +349,7 @@ func (h *UploadHandler) PreviewExcel(c echo.Context) error {
 }
 
 func (h *UploadHandler) UploadExcel(c echo.Context) error {
-	_ = middleware.GetUser(c)
+	user := middleware.GetUser(c)
 
 	result, err := parseExcel(c)
 	if err != nil {
@@ -422,12 +422,38 @@ func (h *UploadHandler) UploadExcel(c echo.Context) error {
 		}
 	}
 
+	// Auto-create outlet assignments for uploaded records
+	assignmentsCreated := 0
+	assignedPairs := map[string]bool{}
+	for _, r := range dedupMap {
+		outletID, _ := r["outletID"].(string)
+		salesID, _ := r["salesID"].(string)
+		if outletID == "" || salesID == "" {
+			continue
+		}
+		key := outletID + "|" + salesID
+		if assignedPairs[key] {
+			continue
+		}
+		assignedPairs[key] = true
+		_, err := db.Pool.Exec(ctx,
+			`INSERT INTO outlet_assignments (id, outlet_id, salesman_id, assigned_by, notes)
+			 SELECT gen_random_uuid(), $1, $2, $3, 'Auto-assigned via Excel upload'
+			 WHERE NOT EXISTS (
+				 SELECT 1 FROM outlet_assignments WHERE outlet_id = $1 AND salesman_id = $2 AND unassigned_at IS NULL
+			 )`,
+			outletID, salesID, user.ID,
+		)
+		if err == nil {
+			assignmentsCreated++
+		}
+	}
+
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"success":            true,
 		"inserted":           insertedCount,
 		"totalPreviewed":     result.Total,
 		"newOutletsCreated":  len(result.NewOutlets),
-		"assignmentsCreated": 0,
-		"assignmentsUpdated": 0,
+		"assignmentsCreated": assignmentsCreated,
 	})
 }

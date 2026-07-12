@@ -557,7 +557,7 @@ func (h *UserHandler) GetTeamDashboard(c echo.Context, user *middleware.JWTClaim
 				COALESCE(SUM(CASE WHEN sr.record_date >= $3 AND sr.record_date <= $4 THEN sr.volume_be ELSE 0 END), 0) as be_prev,
 				COALESCE(SUM(CASE WHEN sr.record_date >= $5 AND sr.record_date <= $6 THEN sr.volume_be ELSE 0 END), 0) as be_prev2,
 				COALESCE(SUM(CASE WHEN sr.record_date >= $1 AND sr.record_date <= $2 THEN 1 ELSE 0 END), 0) as freq_3mo,
-				MAX(sr.record_date) as last_order
+			MAX(sr.record_date)::text as last_order
 			 FROM outlets o
 			 LEFT JOIN sales_records sr ON sr.outlet_id = o.id AND sr.sales_id = ANY($7::uuid[])
 			 GROUP BY o.id, o.name, o.type, o.address, o.contact_person, o.branch_area`,
@@ -639,6 +639,21 @@ func (h *UserHandler) GetDashboard(c echo.Context) error {
 	ctx := context.Background()
 	month, year, start, end := utils.GetCurrentMonthRange()
 
+	// Read optional date range / groupBy from query params
+	dateStart := c.QueryParam("dateStart")
+	dateEnd := c.QueryParam("dateEnd")
+	groupBy := c.QueryParam("groupBy")
+	if groupBy == "" {
+		groupBy = "month"
+	}
+	useProvidedRange := dateStart != "" && dateEnd != ""
+	rangeStart := start
+	rangeEnd := end
+	if useProvidedRange {
+		rangeStart = dateStart
+		rangeEnd = dateEnd
+	}
+
 	// --- Phase 1: User ---
 	var userModel models.User
 	err := db.Pool.QueryRow(ctx,
@@ -702,7 +717,7 @@ func (h *UserHandler) GetDashboard(c echo.Context) error {
 	var currentBE, monthBE float64
 	err = db.Pool.QueryRow(ctx,
 		`SELECT COALESCE(SUM(volume_be), 0) FROM sales_records WHERE sales_id = $1 AND record_date >= $2 AND record_date <= $3`,
-		user.ID, start, end,
+		user.ID, rangeStart, rangeEnd,
 	).Scan(&currentBE)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch sales data"})
@@ -721,7 +736,7 @@ func (h *UserHandler) GetDashboard(c echo.Context) error {
 	incentiveMap := map[string]float64{}
 	incRows, err := db.Pool.Query(ctx,
 		`SELECT sku_name, bonus_be, notes FROM sku_incentives WHERE is_active = true AND start_date <= $1 AND end_date >= $2`,
-		end, start,
+		rangeEnd, rangeStart,
 	)
 	if err == nil {
 		defer incRows.Close()
@@ -746,7 +761,7 @@ func (h *UserHandler) GetDashboard(c echo.Context) error {
 		 JOIN sku_incentives si ON sr.sku_name = si.sku_name
 		   AND sr.record_date >= si.start_date AND sr.record_date <= si.end_date
 		 WHERE sr.sales_id = $1 AND sr.record_date >= $2 AND sr.record_date <= $3 AND si.is_active = true`,
-		user.ID, start, end,
+		user.ID, rangeStart, rangeEnd,
 	).Scan(&incentiveBE)
 	if err != nil {
 		incentiveBE = 0
@@ -766,7 +781,7 @@ func (h *UserHandler) GetDashboard(c echo.Context) error {
 		) as is_active
 		FROM outlets o
 		INNER JOIN outlet_assignments oa ON oa.outlet_id = o.id AND oa.salesman_id = $1 AND oa.unassigned_at IS NULL`,
-		user.ID, start, end,
+		user.ID, rangeStart, rangeEnd,
 	)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to fetch assigned outlets"})
@@ -791,7 +806,13 @@ func (h *UserHandler) GetDashboard(c echo.Context) error {
 	now := time.Now()
 	daysElapsed := min(now.Day(), daysInMonthCount(year, month))
 	daysInMonth := daysInMonthCount(year, month)
+
 	rangeDays := daysElapsed
+	if useProvidedRange {
+		rs, _ := time.Parse("2006-01-02", rangeStart)
+		re, _ := time.Parse("2006-01-02", rangeEnd)
+		rangeDays = int(re.Sub(rs).Hours()/24) + 1
+	}
 
 	prevMonthNum := month - 1
 	prevMonthYear := year
@@ -807,11 +828,17 @@ func (h *UserHandler) GetDashboard(c echo.Context) error {
 
 	effectivePrevStart := prevMonthStart
 	effectivePrevEnd := prevMonthEnd
+	if useProvidedRange {
+		rs, _ := time.Parse("2006-01-02", rangeStart)
+		effectivePrevEnd = rs.AddDate(0, 0, -1).Format("2006-01-02")
+		pe, _ := time.Parse("2006-01-02", effectivePrevEnd)
+		effectivePrevStart = pe.AddDate(0, 0, -(rangeDays-1)).Format("2006-01-02")
+	}
 
 	// OHS date ranges
 	_, _, prev2Start, prev2End := utils.GetPreviousMonthRange(month, year, 2)
 	outletRangeStart := prev2Start
-	outletRangeEnd := end
+	outletRangeEnd := rangeEnd
 
 	// --- Phase 7: SKU performance ---
 	type skuCurrentRow struct {
@@ -827,7 +854,7 @@ func (h *UserHandler) GetDashboard(c echo.Context) error {
 		 WHERE sales_id = $1 AND record_date >= $2 AND record_date <= $3
 		   AND sku_name IS NOT NULL AND sku_name <> ''
 		 GROUP BY sku_name ORDER BY volume DESC LIMIT 5`,
-		user.ID, start, end,
+		user.ID, rangeStart, rangeEnd,
 	)
 	if err == nil {
 		defer skuRows.Close()
@@ -901,7 +928,7 @@ func (h *UserHandler) GetDashboard(c echo.Context) error {
 		   AND sr.sku_name IS NOT NULL AND sr.sku_name <> ''
 		 GROUP BY sr.sku_name, o.name
 		 ORDER BY sr.sku_name, outlet_volume DESC`,
-		user.ID, start, end,
+		user.ID, rangeStart, rangeEnd,
 	)
 	if err == nil {
 		defer skuTORows.Close()
@@ -923,7 +950,7 @@ func (h *UserHandler) GetDashboard(c echo.Context) error {
 		   AND sku_name IS NOT NULL AND sku_name <> ''
 		 GROUP BY sku_name, EXTRACT(WEEK FROM record_date)
 		 ORDER BY sku_name, week_num`,
-		user.ID, start, end,
+		user.ID, rangeStart, rangeEnd,
 	)
 	if err == nil {
 		defer skuWeeklyRows.Close()
@@ -947,7 +974,7 @@ func (h *UserHandler) GetDashboard(c echo.Context) error {
 		 WHERE sr.sales_id = $1 AND sr.record_date >= $2 AND sr.record_date <= $3
 		   AND sr.sku_name IS NOT NULL AND sr.sku_name <> ''
 		 ORDER BY sr.sku_name, sr.record_date DESC`,
-		user.ID, start, end,
+		user.ID, rangeStart, rangeEnd,
 	)
 	if err == nil {
 		defer skuTxRows.Close()
@@ -1060,6 +1087,91 @@ func (h *UserHandler) GetDashboard(c echo.Context) error {
 		})
 	}
 
+	// --- Grouped data for charting ---
+	var groupedData interface{}
+	if groupBy == "day" || groupBy == "week" {
+		type groupedRow struct {
+			Label   string
+			WeekStart *string
+			Volume  float64
+			SKUName string
+		}
+		var gRows []groupedRow
+		if groupBy == "day" {
+			rows, err := db.Pool.Query(ctx,
+				`SELECT sku_name, TO_CHAR(record_date, 'YYYY-MM-DD') as label, SUM(volume_be) as daily_volume
+				 FROM sales_records
+				 WHERE sales_id = $1 AND record_date >= $2 AND record_date <= $3
+				   AND sku_name IS NOT NULL AND sku_name <> ''
+				 GROUP BY sku_name, TO_CHAR(record_date, 'YYYY-MM-DD')
+				 ORDER BY label`,
+				user.ID, rangeStart, rangeEnd,
+			)
+			if err == nil {
+				defer rows.Close()
+				for rows.Next() {
+					var r groupedRow
+					if err := rows.Scan(&r.SKUName, &r.Label, &r.Volume); err != nil {
+						continue
+					}
+					gRows = append(gRows, r)
+				}
+			}
+		} else {
+			rows, err := db.Pool.Query(ctx,
+				`SELECT sku_name, TO_CHAR(record_date, 'YYYY-WW') as label,
+				   MIN(record_date)::text as week_start, SUM(volume_be) as daily_volume
+				 FROM sales_records
+				 WHERE sales_id = $1 AND record_date >= $2 AND record_date <= $3
+				   AND sku_name IS NOT NULL AND sku_name <> ''
+				 GROUP BY sku_name, TO_CHAR(record_date, 'YYYY-WW')
+				 ORDER BY week_start`,
+				user.ID, rangeStart, rangeEnd,
+			)
+			if err == nil {
+				defer rows.Close()
+				for rows.Next() {
+					var r groupedRow
+					if err := rows.Scan(&r.SKUName, &r.Label, &r.WeekStart, &r.Volume); err != nil {
+						continue
+					}
+					gRows = append(gRows, r)
+				}
+			}
+		}
+		type groupedDataPoint struct {
+			Label     string              `json:"label"`
+			WeekStart *string             `json:"weekStart,omitempty"`
+			Volume    float64             `json:"volume"`
+			SKUs      map[string]float64  `json:"skus"`
+		}
+		groupedMap := map[string]*groupedDataPoint{}
+		for _, r := range gRows {
+			if _, ok := groupedMap[r.Label]; !ok {
+				groupedMap[r.Label] = &groupedDataPoint{
+					Label:     r.Label,
+					WeekStart: r.WeekStart,
+					SKUs:      map[string]float64{},
+				}
+			}
+			groupedMap[r.Label].Volume += r.Volume
+			groupedMap[r.Label].SKUs[r.SKUName] += r.Volume
+		}
+		grouped := make([]groupedDataPoint, 0, len(groupedMap))
+		for _, v := range groupedMap {
+			grouped = append(grouped, *v)
+		}
+		// Sort by label
+		for i := 0; i < len(grouped); i++ {
+			for j := i + 1; j < len(grouped); j++ {
+				if grouped[j].Label < grouped[i].Label {
+					grouped[i], grouped[j] = grouped[j], grouped[i]
+				}
+			}
+		}
+		groupedData = grouped
+	}
+
 	// --- Phase 8: Outlets with OHS ---
 	type outletRawRow struct {
 		ID, Name, BranchArea, Address, ContactPerson string
@@ -1068,6 +1180,8 @@ func (h *UserHandler) GetDashboard(c echo.Context) error {
 		LastOrder                  *string
 	}
 	var outletRawRows []outletRawRow
+	fmt.Printf("[Phase8] user.ID=%s start=%s end=%s prevStart=%s prevEnd=%s prev2Start=%s prev2End=%s rangeStart=%s rangeEnd=%s\n",
+		user.ID, start, end, effectivePrevStart, effectivePrevEnd, prev2Start, prev2End, outletRangeStart, outletRangeEnd)
 	olRows, err := db.Pool.Query(ctx,
 		`SELECT
 			o.id, o.name, o.type, o.address, o.contact_person, o.branch_area,
@@ -1075,13 +1189,13 @@ func (h *UserHandler) GetDashboard(c echo.Context) error {
 			COALESCE(SUM(CASE WHEN sr.record_date >= $4 AND sr.record_date <= $5 THEN sr.volume_be ELSE 0 END), 0) as be_prev,
 			COALESCE(SUM(CASE WHEN sr.record_date >= $6 AND sr.record_date <= $7 THEN sr.volume_be ELSE 0 END), 0) as be_prev2,
 			COALESCE(SUM(CASE WHEN sr.record_date >= $8 AND sr.record_date <= $9 THEN 1 ELSE 0 END), 0) as freq_3mo,
-			MAX(sr.record_date) as last_order
+			MAX(sr.record_date)::text as last_order
 		 FROM outlets o
 		 LEFT JOIN outlet_assignments oa ON oa.outlet_id = o.id AND oa.salesman_id = $1 AND oa.unassigned_at IS NULL
 		 LEFT JOIN sales_records sr ON sr.outlet_id = o.id AND sr.sales_id = $1
 		 WHERE oa.id IS NOT NULL
 		 GROUP BY o.id, o.name, o.type, o.address, o.contact_person, o.branch_area`,
-		user.ID, start, end,
+		user.ID, rangeStart, rangeEnd,
 		effectivePrevStart, effectivePrevEnd,
 		prev2Start, prev2End,
 		outletRangeStart, outletRangeEnd,
@@ -1165,7 +1279,7 @@ func (h *UserHandler) GetDashboard(c echo.Context) error {
 		 FROM sales_records
 		 WHERE sales_id = $1 AND record_date >= $2 AND record_date <= $3
 		 GROUP BY d ORDER BY d`,
-		user.ID, start, end,
+		user.ID, rangeStart, rangeEnd,
 	)
 	if err == nil {
 		defer velRows.Close()
@@ -1194,7 +1308,7 @@ func (h *UserHandler) GetDashboard(c echo.Context) error {
 		 WHERE sr.sales_id = $1 AND sr.record_date >= $2 AND sr.record_date <= $3
 		   AND sr.sku_name IS NOT NULL AND sr.sku_name <> ''
 		 GROUP BY sr.sku_name`,
-		user.ID, start, end,
+		user.ID, rangeStart, rangeEnd,
 	)
 	if err == nil {
 		defer skuPenRows.Close()
@@ -1319,9 +1433,9 @@ func (h *UserHandler) GetDashboard(c echo.Context) error {
 	return c.JSON(http.StatusOK, models.UserDashboardData{
 		User: userModel,
 		DateRange: models.DateRange{
-			Start:   start,
-			End:     end,
-			GroupBy: "month",
+			Start:   rangeStart,
+			End:     rangeEnd,
+			GroupBy: groupBy,
 		},
 		DashboardStats: models.DashboardStats{
 			MonthlyTargetBE:     target.TargetBE,
@@ -1355,7 +1469,7 @@ func (h *UserHandler) GetDashboard(c echo.Context) error {
 		Outlets:        outlets,
 		SKUPerformance: skuPerformance,
 		Analytics:      analytics,
-		GroupedData:    nil,
+		GroupedData:    groupedData,
 		ActiveIncentives: activeIncentives,
 		DaysElapsed:    daysElapsed,
 		DaysInMonth:    daysInMonth,

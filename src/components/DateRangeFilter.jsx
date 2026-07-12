@@ -76,7 +76,7 @@ export default function DateRangeFilter({ activePreset, dateStart, dateEnd, grou
   const isActive = (key) => selectedPreset === key;
 
   return (
-    <div className="space-y-3 sticky top-14 z-40 bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm p-2 will-change-transform">
+    <div className="space-y-3 sticky top-[6rem] z-40 bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm p-2 will-change-transform">
       <div className="flex items-center gap-2 mb-1 cursor-pointer select-none" onClick={() => setShowCustom(s => !s)}>
         <Calendar className="w-4 h-4 text-emerald-500 pointer-events-none" />
         <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t('dateRangeFilter.title')}</span>

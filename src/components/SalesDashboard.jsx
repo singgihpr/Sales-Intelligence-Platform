@@ -79,7 +79,7 @@ export default function SalesDashboard({ data, dateFilter }) {
           groupBy={dateFilter.groupBy}
           onPresetChange={dateFilter.onPresetChange}
           onCustomChange={dateFilter.onCustomChange}
-          onGroupByCh ange={dateFilter.onGroupByChange}
+          onGroupByChange={dateFilter.onGroupByChange}
         />
       )}
 

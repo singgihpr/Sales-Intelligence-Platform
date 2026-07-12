@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useRegisterSW } from 'virtual:pwa-register/react';
-import { TrendingUp, Users, Store, Wifi, WifiOff, RefreshCw, Settings, Globe } from 'lucide-react';
+import { TrendingUp, Store, Wifi, WifiOff, RefreshCw, Settings, Globe } from 'lucide-react';
 import { useTranslation } from './lib/i18n.jsx';
 import SalesDashboard from './components/SalesDashboard';
 import SupervisorDashboard from './components/SupervisorDashboard';
@@ -220,16 +220,6 @@ export default function App() {
           onCustomChange: (start, end) => { setDatePreset('custom'); setDateStart(start); setDateEnd(end); },
           onGroupByChange: setGroupBy
         }} />;
-      case 'team':
-        if (role === 'supervisor' || role === 'admin') {
-          return <SupervisorDashboard data={dashboardData} onNavigate={handleNavigate} />;
-        }
-        return (
-          <div className="flex flex-col items-center justify-center py-24 text-slate-400 italic">
-            <Users className="w-12 h-12 mb-4 opacity-20" />
-            <p>{t('app.teamViewOnly')}</p>
-          </div>
-        );
       case 'profile':
         return (
           <ProfileView
@@ -338,13 +328,6 @@ export default function App() {
           >
             <Store className="w-6 h-6" />
             <span className="text-[10px] font-bold uppercase">{t('app.tabOutlets')}</span>
-          </button>
-          <button
-            onClick={() => { setActiveTab('team'); setSelectedOutlet(null); }}
-            className={`flex flex-col items-center gap-1 ${activeTab === 'team' ? 'text-emerald-600' : 'text-slate-400'}`}
-          >
-            <Users className="w-6 h-6" />
-            <span className="text-[10px] font-bold uppercase">{t('app.tabTeam')}</span>
           </button>
           <button
             onClick={() => { setActiveTab('profile'); setSelectedOutlet(null); }}
