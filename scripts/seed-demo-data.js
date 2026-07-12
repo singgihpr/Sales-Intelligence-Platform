@@ -1,6 +1,18 @@
 import 'dotenv/config';
-import { sql } from '../netlify/functions/lib/db.js';
+import pg from 'pg';
 import bcrypt from 'bcryptjs';
+
+const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+
+const sql = (strings, ...values) => {
+  let q = '';
+  const params = [];
+  for (let i = 0; i < strings.length; i++) {
+    q += strings[i];
+    if (i < values.length) { q += `$${i + 1}`; params.push(values[i] === undefined ? null : values[i]); }
+  }
+  return pool.query(q, params).then(r => r.rows);
+};
 const DEFAULT_PASSWORD = process.env.DEFAULT_PASSWORD;
 if (!DEFAULT_PASSWORD) {
   console.error('❌ Error: DEFAULT_PASSWORD env var is required');
@@ -54,8 +66,8 @@ async function seed() {
   for (const u of DEMO_USERS) {
     const pwHash = await hash(DEFAULT_PASSWORD);
     const res = await sql`
-      INSERT INTO users (id, name, email, role, region, level, password_hash, netlify_uid)
-      VALUES (gen_random_uuid(), ${u.name}, ${u.email}, ${u.role}, ${u.region}, ${u.level}, ${pwHash}, gen_random_uuid()::text)
+      INSERT INTO users (id, name, email, role, region, level, password_hash)
+      VALUES (gen_random_uuid(), ${u.name}, ${u.email}, ${u.role}, ${u.region}, ${u.level}, ${pwHash})
       ON CONFLICT (email) DO UPDATE SET role = EXCLUDED.role, region = EXCLUDED.region, level = EXCLUDED.level
       RETURNING id, name, email, role, level
     `;
@@ -186,4 +198,6 @@ async function seed() {
 seed().catch(err => {
   console.error('❌ Seeding failed:', err);
   process.exit(1);
+}).finally(() => {
+  pool.end();
 });

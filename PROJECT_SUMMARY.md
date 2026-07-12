@@ -115,4 +115,4 @@ Ada **tombol Info (ⓘ)** yang menjelaskan rumus dan arti warna OHS.
 
 ---
 
-> **Catatan teknis:** Semua fitur di atas sudah terintegrasi dengan database Neon PostgreSQL dan backend Netlify Functions. Data salesman, outlet, assignment, dan target bonus disimpan secara live.
+> **Catatan teknis:** Semua fitur di atas sudah terintegrasi dengan database PostgreSQL dan backend Go (Echo). Data salesman, outlet, assignment, dan target bonus disimpan secara live.

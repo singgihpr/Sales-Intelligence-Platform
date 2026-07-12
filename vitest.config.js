@@ -19,7 +19,6 @@ export default defineConfig({
         '**/*.test.{js,jsx}',
         '**/*.config.{js,ts}',
         'scripts/',
-        'netlify/',
         'dist/',
       ],
     },

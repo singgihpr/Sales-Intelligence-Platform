@@ -1,6 +1,18 @@
 import 'dotenv/config';
-import { sql } from '../netlify/functions/lib/db.js';
+import pg from 'pg';
 import bcrypt from 'bcryptjs';
+
+const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+
+const sql = (strings, ...values) => {
+  let q = '';
+  const params = [];
+  for (let i = 0; i < strings.length; i++) {
+    q += strings[i];
+    if (i < values.length) { q += `$${i + 1}`; params.push(values[i] === undefined ? null : values[i]); }
+  }
+  return pool.query(q, params).then(r => r.rows);
+};
 
 async function seed() {
   const email = process.argv[2] || 'admin@example.com';
@@ -20,8 +32,8 @@ async function seed() {
       console.log(`✅ Updated existing user: ${email}`);
     } else {
       const res = await sql`
-        INSERT INTO users (id, name, email, role, region, password_hash, netlify_uid)
-        VALUES (gen_random_uuid(), ${name}, ${email}, 'admin', 'HQ', ${hash}, gen_random_uuid()::text)
+        INSERT INTO users (id, name, email, role, region, password_hash)
+        VALUES (gen_random_uuid(), ${name}, ${email}, 'admin', 'HQ', ${hash})
         RETURNING *
       `;
       console.log(`✅ Created admin user: ${res[0].email} (role: ${res[0].role})`);
@@ -30,6 +42,8 @@ async function seed() {
   } catch (err) {
     console.error('❌ Seed failed:', err.message);
     process.exit(1);
+  } finally {
+    await pool.end();
   }
 }
 

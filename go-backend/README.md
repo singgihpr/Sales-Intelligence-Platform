@@ -23,21 +23,21 @@ go-backend/
 └── utils/utils.go          # Business logic helpers
 ```
 
-## Performance Improvements
+## Performance
 
-| Metric | Node.js | Go/Echo | Improvement |
-|--------|---------|---------|-------------|
-| Request throughput | ~5-10K req/s | ~50-100K req/s | 10x |
-| Memory per request | ~2-5MB | ~2-8KB | 500x |
-| Dashboard latency | ~500ms | ~100ms | 5x |
-| Concurrent connections | ~1K | ~100K | 100x |
+| Metric | Value |
+|--------|-------|
+| Request throughput | ~50-100K req/s |
+| Memory per request | ~2-8KB |
+| Dashboard latency | ~100ms |
+| Concurrent connections | ~100K |
 
 ## Key Features
 
 - **Concurrent DB queries** - Dashboard data fetched in parallel using goroutines
 - **Connection pooling** - pgxpool with configurable min/max connections
-- **JWT authentication** - Same token format as Node.js backend
-- **Excel parsing** - Native Go excelize library (10x faster than JS xlsx)
+- **JWT authentication** - Custom JWT + bcrypt
+- **Excel parsing** - Native Go excelize library
 - **Same API contract** - Drop-in replacement for frontend
 
 ## Quick Start
@@ -74,7 +74,7 @@ docker-compose up -d
 
 ## API Endpoints
 
-All endpoints match the existing Node.js backend:
+All endpoints use `/api` with query parameters:
 
 ### Auth
 - `POST /api?type=auth` - Login
@@ -131,13 +131,6 @@ All endpoints match the existing Node.js backend:
 | `JWT_SECRET` | `dev-secret` | JWT signing secret |
 | `DEFAULT_PASSWORD` | - | Default password for new users |
 | `FRONTEND_DIR` | `./dist` | Frontend static files directory |
-
-## Migration from Node.js
-
-1. Build Go backend
-2. Update docker-compose to use Go image
-3. Same database, same API contract
-4. Frontend works without changes
 
 ## Benchmark
 

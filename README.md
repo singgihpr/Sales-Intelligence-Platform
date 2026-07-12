@@ -1,6 +1,6 @@
 # Sales Intelligence Platform
 
-A mobile-first sales intelligence dashboard for field teams. Built with **React + Vite** frontend, **Go (Echo)** backend, and **PostgreSQL** database. Deployable on **VPS** with Docker or **Netlify** (serverless with Node.js adapter).
+A mobile-first sales intelligence dashboard for field teams. Built with **React + Vite** frontend, **Go (Echo)** backend, and **PostgreSQL** database. Deployable on **VPS** with Docker.
 
 ---
 
@@ -130,6 +130,9 @@ psql $DATABASE_URL -f migrations/003_user_branches.sql
 │   ├── lib/api.js              # Unified API base path (/api)
 │   ├── App.jsx                 # Main app shell
 │   └── main.jsx                # Router + protected routes
+├── scripts/                    # Dev utilities
+│   ├── seed-admin.js           # Create admin user
+│   └── seed-demo-data.js       # Seed demo data
 ├── migrations/                 # SQL migrations
 ├── docker/postgres/init.sql    # Schema for fresh DB
 ├── Dockerfile                  # Production: frontend + Go multi-stage
@@ -174,22 +177,21 @@ sudo apt install -y certbot python3-certbot-nginx
 sudo certbot --nginx -d yourdomain.com
 ```
 
-### Netlify (Serverless — legacy)
+### Netlify (Serverless — removed)
 
-The `netlify/` directory contains a Node.js adapter for Netlify Functions. Use this only if deploying to Netlify with Neon PostgreSQL.
+Netlify Functions adapter has been removed. The Go backend handles all API routes directly.
 
 ---
 
-## Performance Comparison (Go vs Node.js)
+## Performance (Go backend)
 
-| Metric | Node.js/Express | Go/Echo | Improvement |
-|--------|----------------|---------|-------------|
-| Request throughput | ~5-10K req/s | ~50-100K req/s | 10x |
-| Memory per request | ~2-5MB | ~2-8KB | 500x |
-| Dashboard latency | ~500ms | ~100ms | 5x |
-| Concurrent connections | ~1K | ~100K | 100x |
-| Excel parsing | JS xlsx | Go excelize | 10x |
-| Docker image size | ~200MB | ~20MB | 10x |
+| Metric | Value |
+|--------|-------|
+| Request throughput | ~50-100K req/s |
+| Memory per request | ~2-8KB |
+| Dashboard latency | ~100ms |
+| Concurrent connections | ~100K |
+| Docker image size | ~20MB |
 
 ---
 
@@ -229,7 +231,7 @@ CRUD operations: `POST` (create), `PUT` (update), `DELETE` (delete) for each typ
 - **No Netlify Identity:** All authentication is custom JWT + PostgreSQL.
 - **Concurrent queries:** Go backend runs dashboard queries in parallel using goroutines.
 - **PWA:** The app is PWA-ready via `vite-plugin-pwa`. Icons are expected in `/public/icons/`.
-- **CORS:** Enabled on both Go and Netlify adapters for flexibility.
+- **CORS:** Enabled on Go backend for flexibility.
 
 ---
 
