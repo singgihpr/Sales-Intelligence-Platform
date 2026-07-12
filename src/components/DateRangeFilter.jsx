@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Calendar, ChevronDown } from 'lucide-react';
 import { useTranslation } from '../lib/i18n.jsx';
 
@@ -45,12 +45,41 @@ const GROUP_OPTIONS = [
   { key: 'day', labelKey: 'day' },
 ];
 
-export default function DateRangeFilter({ activePreset, dateStart, dateEnd, groupBy, onPresetChange, onCustomChange, onGroupByChange }) {
+export default function DateRangeFilter({ activePreset, dateStart, dateEnd, groupBy, onPresetChange, onCustomChange, onGroupByChange, onStickyChange }) {
   const { t } = useTranslation();
   const [customStart, setCustomStart] = useState(dateStart || '');
   const [customEnd, setCustomEnd] = useState(dateEnd || '');
   const [showCustom, setShowCustom] = useState(activePreset === 'custom');
   const [selectedPreset, setSelectedPreset] = useState(activePreset || 'thisMonth');
+  const [isSticky, setIsSticky] = useState(false);
+  const [showStickyAnim, setShowStickyAnim] = useState(false);
+  const [filterHeight, setFilterHeight] = useState(0);
+  const filterRef = useRef(null);
+  const naturalTopRef = useRef(null);
+  const isStickyRef = useRef(false);
+
+  useEffect(() => {
+    if (filterRef.current) {
+      naturalTopRef.current = filterRef.current.getBoundingClientRect().top + window.scrollY;
+      setFilterHeight(filterRef.current.offsetHeight);
+    }
+
+    const handleScroll = () => {
+      if (naturalTopRef.current === null || !filterRef.current) return;
+      const threshold = naturalTopRef.current - 3;
+      const shouldStick = window.scrollY >= threshold;
+
+      if (shouldStick !== isStickyRef.current) {
+        isStickyRef.current = shouldStick;
+        setIsSticky(shouldStick);
+        setFilterHeight(filterRef.current.offsetHeight);
+        onStickyChange?.(shouldStick);
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   useEffect(() => {
     if (activePreset) {
@@ -58,6 +87,14 @@ export default function DateRangeFilter({ activePreset, dateStart, dateEnd, grou
       setShowCustom(activePreset === 'custom');
     }
   }, [activePreset]);
+
+  useEffect(() => {
+    if (isSticky) {
+      const raf = requestAnimationFrame(() => setShowStickyAnim(true));
+      return () => cancelAnimationFrame(raf);
+    }
+    setShowStickyAnim(false);
+  }, [isSticky]);
 
   const handlePreset = (preset) => {
     const range = preset.getRange();
@@ -76,103 +113,116 @@ export default function DateRangeFilter({ activePreset, dateStart, dateEnd, grou
   const isActive = (key) => selectedPreset === key;
 
   return (
-    <div className="space-y-3 sticky top-[6rem] z-40 bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm p-2 will-change-transform">
-      <div className="flex items-center gap-2 mb-1 cursor-pointer select-none" onClick={() => setShowCustom(s => !s)}>
-        <Calendar className="w-4 h-4 text-emerald-500 pointer-events-none" />
-        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t('dateRangeFilter.title')}</span>
-      </div>
+    <>
+      {isSticky && <div style={{ height: filterHeight }} className="w-full space-y-0" />}
 
-      <div className="flex flex-wrap gap-1.5">
-        {PRESETS.map(p => (
+      <div
+        ref={filterRef}
+        className={`bg-white dark:bg-slate-900 p-2 will-change-transform ${
+          isSticky
+            ? showStickyAnim
+              ? 'fixed top-0 left-0 right-0 z-[51] !mt-0 px-4 py-2 rounded-none border-x-0 shadow-lg transition-opacity duration-300'
+              : 'fixed top-0 left-0 right-0 z-[51] !mt-0 px-4 py-2 rounded-none border-x-0 shadow-lg opacity-0'
+            : 'sticky top-[6rem] z-40 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm space-y-3'
+        } transition-[box-shadow,border-radius] duration-500`}
+      >
+        <div className="flex items-center gap-2 mb-1 cursor-pointer select-none" onClick={() => setShowCustom(s => !s)}>
+          <Calendar className="w-4 h-4 text-emerald-500 pointer-events-none" />
+          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t('dateRangeFilter.title')}</span>
+        </div>
+
+        <div className="flex flex-wrap gap-1.5">
+          {PRESETS.map(p => (
+            <button
+              key={p.key}
+              onClick={() => handlePreset(p)}
+              className={`px-3 py-1.5 rounded-full text-[10px] font-bold transition-all ${
+                isActive(p.key)
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+              }`}
+            >
+              {t(`dateRangeFilter.presets.${p.labelKey}`)}
+            </button>
+          ))}
           <button
-            key={p.key}
-            onClick={() => handlePreset(p)}
-            className={`px-3 py-1.5 rounded-full text-[10px] font-bold transition-all ${
-              isActive(p.key)
+            onClick={() => setShowCustom(s => !s)}
+            className={`px-3 py-1.5 rounded-full text-[10px] font-bold transition-all flex items-center gap-1 ${
+              isActive('custom')
                 ? 'bg-emerald-600 text-white shadow-sm'
                 : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
             }`}
           >
-            {t(`dateRangeFilter.presets.${p.labelKey}`)}
+            {t('dateRangeFilter.custom')} <ChevronDown className={`w-3 h-3 transition-transform pointer-events-none ${showCustom ? 'rotate-180' : ''}`} />
           </button>
-        ))}
-        <button
-          onClick={() => setShowCustom(s => !s)}
-          className={`px-3 py-1.5 rounded-full text-[10px] font-bold transition-all flex items-center gap-1 ${
-            isActive('custom')
-              ? 'bg-emerald-600 text-white shadow-sm'
-              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
-          }`}
-        >
-          {t('dateRangeFilter.custom')} <ChevronDown className={`w-3 h-3 transition-transform pointer-events-none ${showCustom ? 'rotate-180' : ''}`} />
-        </button>
+        </div>
+
+        {showCustom && (
+          <div className="flex flex-col sm:flex-row gap-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl p-2">
+            <div
+              className="flex-1 px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 min-h-[48px] touch-manipulation cursor-pointer flex items-center"
+              onClick={(e) => { const inp = e.currentTarget.querySelector('input'); try { inp.showPicker(); } catch { inp.focus(); } }}
+            >
+              <span className="text-sm sm:text-xs text-slate-700 dark:text-slate-300 pointer-events-none">
+                {customStart || t('dateRangeFilter.startDate')}
+              </span>
+              <input
+                type="date"
+                value={customStart}
+                onChange={e => setCustomStart(e.target.value)}
+                max={customEnd || undefined}
+                className="sr-only"
+                aria-label={t('dateRangeFilter.startDate')}
+              />
+            </div>
+            <span className="text-xs text-slate-400 self-center">{t('dateRangeFilter.fromTo')}</span>
+            <div
+              className="flex-1 px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 min-h-[48px] touch-manipulation cursor-pointer flex items-center"
+              onClick={(e) => { const inp = e.currentTarget.querySelector('input'); try { inp.showPicker(); } catch { inp.focus(); } }}
+            >
+              <span className="text-sm sm:text-xs text-slate-700 dark:text-slate-300 pointer-events-none">
+                {customEnd || t('dateRangeFilter.endDate')}
+              </span>
+              <input
+                type="date"
+                value={customEnd}
+                onChange={e => setCustomEnd(e.target.value)}
+                min={customStart || undefined}
+                className="sr-only"
+                aria-label={t('dateRangeFilter.endDate')}
+              />
+            </div>
+            <button
+              onClick={handleCustomApply}
+              disabled={!customStart || !customEnd}
+              className="w-full sm:w-auto px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              {t('dateRangeFilter.apply')}
+            </button>
+          </div>
+        )}
+
+        {onGroupByChange && (
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-medium text-slate-400">{t('dateRangeFilter.group')}:</span>
+            <div className="flex gap-1">
+              {GROUP_OPTIONS.map(g => (
+                <button
+                  key={g.key}
+                  onClick={() => onGroupByChange(g.key)}
+                  className={`px-2.5 py-1 rounded-full text-[10px] font-bold transition-all ${
+                    groupBy === g.key
+                      ? 'bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-white'
+                      : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+                  }`}
+                >
+                  {t(`dateRangeFilter.groups.${g.labelKey}`)}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
-
-      {showCustom && (
-        <div className="flex flex-col sm:flex-row gap-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl p-2">
-          <div
-            className="flex-1 px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 min-h-[48px] touch-manipulation cursor-pointer flex items-center"
-            onClick={(e) => { const inp = e.currentTarget.querySelector('input'); try { inp.showPicker(); } catch { inp.focus(); } }}
-          >
-            <span className="text-sm sm:text-xs text-slate-700 dark:text-slate-300 pointer-events-none">
-              {customStart || t('dateRangeFilter.startDate')}
-            </span>
-            <input
-              type="date"
-              value={customStart}
-              onChange={e => setCustomStart(e.target.value)}
-              max={customEnd || undefined}
-              className="sr-only"
-              aria-label={t('dateRangeFilter.startDate')}
-            />
-          </div>
-          <span className="text-xs text-slate-400 self-center">{t('dateRangeFilter.fromTo')}</span>
-          <div
-            className="flex-1 px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 min-h-[48px] touch-manipulation cursor-pointer flex items-center"
-            onClick={(e) => { const inp = e.currentTarget.querySelector('input'); try { inp.showPicker(); } catch { inp.focus(); } }}
-          >
-            <span className="text-sm sm:text-xs text-slate-700 dark:text-slate-300 pointer-events-none">
-              {customEnd || t('dateRangeFilter.endDate')}
-            </span>
-            <input
-              type="date"
-              value={customEnd}
-              onChange={e => setCustomEnd(e.target.value)}
-              min={customStart || undefined}
-              className="sr-only"
-              aria-label={t('dateRangeFilter.endDate')}
-            />
-          </div>
-          <button
-            onClick={handleCustomApply}
-            disabled={!customStart || !customEnd}
-            className="w-full sm:w-auto px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-          >
-            {t('dateRangeFilter.apply')}
-          </button>
-        </div>
-      )}
-
-      {onGroupByChange && (
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] font-medium text-slate-400">{t('dateRangeFilter.group')}:</span>
-          <div className="flex gap-1">
-            {GROUP_OPTIONS.map(g => (
-              <button
-                key={g.key}
-                onClick={() => onGroupByChange(g.key)}
-                className={`px-2.5 py-1 rounded-full text-[10px] font-bold transition-all ${
-                  groupBy === g.key
-                    ? 'bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-white'
-                    : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
-                }`}
-              >
-                {t(`dateRangeFilter.groups.${g.labelKey}`)}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
+    </>
   );
 }

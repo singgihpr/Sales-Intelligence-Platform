@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useRegisterSW } from 'virtual:pwa-register/react';
-import { TrendingUp, Store, Wifi, WifiOff, RefreshCw, Settings, Globe } from 'lucide-react';
+import { TrendingUp, Store, Wifi, WifiOff, RefreshCw, Settings, Globe, ArrowUp } from 'lucide-react';
 import { useTranslation } from './lib/i18n.jsx';
 import SalesDashboard from './components/SalesDashboard';
 import SupervisorDashboard from './components/SupervisorDashboard';
@@ -88,8 +88,16 @@ export default function App() {
   const [dateStart, setDateStart] = useState(null);
   const [dateEnd, setDateEnd] = useState(null);
   const [groupBy, setGroupBy] = useState('month');
+  const [filterSticky, setFilterSticky] = useState(false);
 
   const { pulling, pullProgress, triggered } = usePullToRefresh(true);
+
+  const [showBackToTop, setShowBackToTop] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setShowBackToTop(window.scrollY > 300);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   // PWA silent auto-reload on update
   useRegisterSW({
@@ -209,7 +217,8 @@ export default function App() {
             preset: datePreset, dateStart, dateEnd, groupBy,
             onPresetChange: (preset, start, end) => { setDatePreset(preset); setDateStart(start); setDateEnd(end); },
             onCustomChange: (start, end) => { setDatePreset('custom'); setDateStart(start); setDateEnd(end); },
-            onGroupByChange: setGroupBy
+            onGroupByChange: setGroupBy,
+            onStickyChange: setFilterSticky
           }} />;
         }
         return <SupervisorDashboard data={dashboardData} onNavigate={handleNavigate} />;
@@ -218,7 +227,8 @@ export default function App() {
           preset: datePreset, dateStart, dateEnd, groupBy,
           onPresetChange: (preset, start, end) => { setDatePreset(preset); setDateStart(start); setDateEnd(end); },
           onCustomChange: (start, end) => { setDatePreset('custom'); setDateStart(start); setDateEnd(end); },
-          onGroupByChange: setGroupBy
+          onGroupByChange: setGroupBy,
+          onStickyChange: setFilterSticky
         }} />;
       case 'profile':
         return (
@@ -240,7 +250,8 @@ export default function App() {
             preset: datePreset, dateStart, dateEnd, groupBy,
             onPresetChange: (preset, start, end) => { setDatePreset(preset); setDateStart(start); setDateEnd(end); },
             onCustomChange: (start, end) => { setDatePreset('custom'); setDateStart(start); setDateEnd(end); },
-            onGroupByChange: setGroupBy
+            onGroupByChange: setGroupBy,
+            onStickyChange: setFilterSticky
           }} />
           : <SupervisorDashboard data={dashboardData} onNavigate={handleNavigate} />;
     }
@@ -267,7 +278,7 @@ export default function App() {
         </div>
       )}
 
-      <nav className="sticky top-0 z-50 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md border-b border-slate-100 dark:border-slate-800 px-4 py-3">
+      <nav className={`sticky top-0 z-50 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md border-b border-slate-100 dark:border-slate-800 px-4 py-3 transition-transform duration-300 ease-in-out ${filterSticky ? '-translate-y-full pointer-events-none' : ''}`}>
         <div className="flex items-center justify-between max-w-lg lg:max-w-[1400px] mx-auto">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center">
@@ -308,7 +319,7 @@ export default function App() {
         </div>
       </nav>
 
-      <main className="max-w-lg lg:max-w-[1400px] mx-auto p-4 pt-6">
+      <main className="max-w-lg lg:max-w-[1400px] mx-auto p-4 pt-6 pb-20">
         {renderContent()}
       </main>
 
@@ -340,6 +351,16 @@ export default function App() {
           </button>
         </div>
       </div>
+
+      {/* Back to Top */}
+      <button
+        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        className={`fixed bottom-24 right-4 z-50 w-10 h-10 rounded-full bg-emerald-600 text-white shadow-lg flex items-center justify-center transition-all duration-300 ${
+          showBackToTop ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-4 pointer-events-none'
+        }`}
+      >
+        <ArrowUp className="w-5 h-5" />
+      </button>
 
       {/* PWA Install Prompt */}
       <InstallPrompt />
