@@ -169,11 +169,7 @@ export default function App() {
     if (!token) return;
     const controller = new AbortController();
     fetchDashboard(controller.signal);
-    const interval = setInterval(() => fetchDashboard(new AbortController().signal), 30000);
-    return () => {
-      controller.abort();
-      clearInterval(interval);
-    };
+    return () => controller.abort();
   }, [token, dateStart, dateEnd, groupBy]);
 
   const navigateToOutlet = (outlet) => {

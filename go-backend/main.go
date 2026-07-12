@@ -116,6 +116,8 @@ func main() {
 			return targetHandler.ListTargets(c)
 		case "sku-incentives":
 			return incentiveHandler.ListIncentives(c)
+		case "outlet-history":
+			return outletHandler.GetOutletHistory(c)
 		case "analytics":
 			return userHandler.GetAnalytics(c)
 		case "":

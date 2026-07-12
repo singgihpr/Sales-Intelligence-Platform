@@ -253,6 +253,7 @@ export function OutletDetailView({ outlet, onBack }) {
   const HISTORY_LIMIT = 5;
   
   useEffect(() => {
+    const controller = new AbortController();
     const fetchHistory = async () => {
       if (!outlet?.id) return;
       setHistoryLoading(true);
@@ -260,6 +261,7 @@ export function OutletDetailView({ outlet, onBack }) {
       try {
         const token = localStorage.getItem('token');
         const res = await fetch(`/api?type=outlet-history&outlet_id=${outlet.id}&page=${historyPage}&limit=${HISTORY_LIMIT}`, {
+          signal: controller.signal,
           headers: { Authorization: `Bearer ${token}` }
         });
         if (!res.ok) throw new Error('Failed to load transaction history');
@@ -267,12 +269,14 @@ export function OutletDetailView({ outlet, onBack }) {
         setTransactionHistory(data.data || []);
         setHistoryTotal(data.total || 0);
       } catch (e) {
+        if (e.name === 'AbortError') return;
         setHistoryError(e.message);
       } finally {
         setHistoryLoading(false);
       }
     };
     fetchHistory();
+    return () => controller.abort();
   }, [outlet?.id, historyPage]);
   
   const trendPositive = (outlet.trend || 0) >= 0;

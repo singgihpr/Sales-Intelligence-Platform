@@ -141,3 +141,70 @@ func (h *OutletHandler) DeleteOutlet(c echo.Context) error {
 
 	return c.JSON(http.StatusOK, map[string]bool{"success": true})
 }
+
+func (h *OutletHandler) GetOutletHistory(c echo.Context) error {
+	outletID := c.QueryParam("outlet_id")
+	if outletID == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "outlet_id required"})
+	}
+
+	page, _ := strconv.Atoi(c.QueryParam("page"))
+	if page < 1 {
+		page = 1
+	}
+	limit, _ := strconv.Atoi(c.QueryParam("limit"))
+	if limit < 1 || limit > 100 {
+		limit = 20
+	}
+	offset := (page - 1) * limit
+
+	ctx := context.Background()
+
+	type historyRow struct {
+		ID   string  `json:"id"`
+		Date string  `json:"date"`
+		BE   float64 `json:"be"`
+		SKU  string  `json:"sku"`
+	}
+
+	rows, err := db.Pool.Query(ctx,
+		`SELECT sr.id, sr.record_date::text, sr.volume_be, COALESCE(sr.sku_name, '')
+		 FROM sales_records sr
+		 WHERE sr.outlet_id = $1
+		   AND sr.record_date >= (CURRENT_DATE - INTERVAL '3 months')
+		   AND sr.record_date <= CURRENT_DATE
+		 ORDER BY sr.record_date DESC
+		 LIMIT $2 OFFSET $3`,
+		outletID, limit, offset,
+	)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Database error"})
+	}
+	defer rows.Close()
+
+	var data []historyRow
+	for rows.Next() {
+		var r historyRow
+		if err := rows.Scan(&r.ID, &r.Date, &r.BE, &r.SKU); err != nil {
+			continue
+		}
+		data = append(data, r)
+	}
+
+	var total int
+	db.Pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM sales_records sr
+		 WHERE sr.outlet_id = $1
+		   AND sr.record_date >= (CURRENT_DATE - INTERVAL '3 months')
+		   AND sr.record_date <= CURRENT_DATE`,
+		outletID,
+	).Scan(&total)
+
+	return c.JSON(http.StatusOK, models.PaginatedResponse{
+		Data:       data,
+		Total:      total,
+		Page:       page,
+		Limit:      limit,
+		TotalPages: (total + limit - 1) / limit,
+	})
+}
