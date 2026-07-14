@@ -140,9 +140,9 @@ export default function App() {
   const fetchDashboard = async (signal) => {
     setLoading(true);
     try {
-      let url = '/api';
+      let url = `/api?groupBy=${groupBy}`;
       if (dateStart && dateEnd) {
-        url = `/api?dateStart=${dateStart}&dateEnd=${dateEnd}&groupBy=${groupBy}`;
+        url += `&dateStart=${dateStart}&dateEnd=${dateEnd}`;
       }
       const res = await fetch(url, {
         signal,

@@ -212,8 +212,11 @@ describe('ProfileView', () => {
       renderProfileView();
       await waitFor(() => screen.getByText('John Doe'));
 
-      const changePasswordButton = screen.getAllByText('Ganti Password')[0];
+      const changePasswordButton = screen.getByRole('button', { name: /ganti password/i });
       await userEvent.click(changePasswordButton);
+
+      const currentPasswordInput = await screen.findByPlaceholderText('••••••••');
+      await userEvent.type(currentPasswordInput, 'oldpass123');
 
       const newPasswordInput = screen.getByPlaceholderText('Minimal 6 karakter');
       await userEvent.type(newPasswordInput, '123');
@@ -236,8 +239,11 @@ describe('ProfileView', () => {
       renderProfileView();
       await waitFor(() => screen.getByText('John Doe'));
 
-      const changePasswordButton = screen.getAllByText('Ganti Password')[0];
+      const changePasswordButton = screen.getByRole('button', { name: /ganti password/i });
       await userEvent.click(changePasswordButton);
+
+      const currentPasswordInput = await screen.findByPlaceholderText('••••••••');
+      await userEvent.type(currentPasswordInput, 'oldpass123');
 
       const newPasswordInput = screen.getByPlaceholderText('Minimal 6 karakter');
       await userEvent.type(newPasswordInput, 'password123');
@@ -265,8 +271,11 @@ describe('ProfileView', () => {
       renderProfileView();
       await waitFor(() => screen.getByText('John Doe'));
 
-      const changePasswordButton = screen.getAllByText('Ganti Password')[0];
+      const changePasswordButton = screen.getByRole('button', { name: /ganti password/i });
       await userEvent.click(changePasswordButton);
+
+      const currentPasswordInput = await screen.findByPlaceholderText('••••••••');
+      await userEvent.type(currentPasswordInput, 'oldpass123');
 
       const newPasswordInput = screen.getByPlaceholderText('Minimal 6 karakter');
       await userEvent.type(newPasswordInput, 'newpass123');
@@ -276,6 +285,9 @@ describe('ProfileView', () => {
 
       const submitButton = screen.getByText('Perbarui Password');
       await userEvent.click(submitButton);
+
+      // Verify current_password is sent in the request
+      expect(fetch.mock.calls[1][1].body).toContain('current_password');
 
       await waitFor(() => {
         expect(screen.getByText('Password berhasil diperbarui')).toBeInTheDocument();

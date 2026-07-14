@@ -242,15 +242,29 @@ func (h *UserHandler) UpdateProfile(c echo.Context) error {
 	}
 
 	var req struct {
-		Name     string `json:"name"`
-		Password string `json:"password"`
+		Name            string `json:"name"`
+		Password        string `json:"password"`
+		CurrentPassword string `json:"current_password"`
 	}
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request"})
 	}
 
+	ctx := context.Background()
+
 	var passwordHash *string
 	if req.Password != "" && req.Password != "••••••" {
+		if req.CurrentPassword == "" {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "Current password is required"})
+		}
+		var currentHash string
+		err := db.Pool.QueryRow(ctx, `SELECT password_hash FROM users WHERE id = $1`, user.ID).Scan(&currentHash)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to verify current password"})
+		}
+		if err := bcrypt.CompareHashAndPassword([]byte(currentHash), []byte(req.CurrentPassword)); err != nil {
+			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Current password is incorrect"})
+		}
 		hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to hash password"})
@@ -259,7 +273,6 @@ func (h *UserHandler) UpdateProfile(c echo.Context) error {
 		passwordHash = &s
 	}
 
-	ctx := context.Background()
 	var profile models.User
 	err := db.Pool.QueryRow(ctx,
 		`UPDATE users SET 
@@ -566,69 +579,69 @@ func (h *UserHandler) GetTeamDashboard(c echo.Context, user *middleware.JWTClaim
 
 	// --- Outlet Health ---
 	outlets := []models.OutletHealth{}
-	if len(teamIDs) > 0 {
-		_, _, prevStart, prevEnd := utils.GetPreviousMonthRange(month, year, 1)
-		_, _, prev2Start, prev2End := utils.GetPreviousMonthRange(month, year, 2)
+	_, _, prevStart, prevEnd := utils.GetPreviousMonthRange(month, year, 1)
+	_, _, prev2Start, prev2End := utils.GetPreviousMonthRange(month, year, 2)
 
-		olRows, err := db.Pool.Query(ctx,
-			`SELECT o.id, o.name, o.type, o.address, o.contact_person, o.branch_area,
-				COALESCE(SUM(CASE WHEN sr.record_date >= $1 AND sr.record_date <= $2 THEN sr.volume_be ELSE 0 END), 0) as be_current,
-				COALESCE(SUM(CASE WHEN sr.record_date >= $3 AND sr.record_date <= $4 THEN sr.volume_be ELSE 0 END), 0) as be_prev,
-				COALESCE(SUM(CASE WHEN sr.record_date >= $5 AND sr.record_date <= $6 THEN sr.volume_be ELSE 0 END), 0) as be_prev2,
-				COALESCE(SUM(CASE WHEN sr.record_date >= $1 AND sr.record_date <= $2 THEN 1 ELSE 0 END), 0) as freq_3mo,
-			MAX(sr.record_date)::text as last_order
-			 FROM outlets o
-			 LEFT JOIN sales_records sr ON sr.outlet_id = o.id AND sr.sales_id = ANY($7::uuid[])
-			 GROUP BY o.id, o.name, o.type, o.address, o.contact_person, o.branch_area`,
-			start, end, prevStart, prevEnd, prev2Start, prev2End, teamIDs,
-		)
-		if err == nil {
-			defer olRows.Close()
-			now := time.Now()
-			for olRows.Next() {
-				var oType string
-				var beCurrent, bePrev, bePrev2 float64
-				var freq3Mo int
-				var lastOrder *time.Time
-				var ol models.OutletHealth
-				if err := olRows.Scan(&ol.ID, &ol.Name, &oType, &ol.Address, &ol.Contact, &ol.BranchArea,
-					&beCurrent, &bePrev, &bePrev2, &freq3Mo, &lastOrder); err != nil {
-					continue
-				}
-				ol.Type = oType
-				ohs := utils.CalculateOHS(beCurrent, bePrev, bePrev2, freq3Mo)
-				ol.Health = ohs.Score
-				ol.TotalBE3Mo = ohs.TotalBE
-				ol.AvgBE = ohs.AvgBE
-				ol.Trend = ohs.Trend
-				ol.Freq3Mo = ohs.Freq3Mo
-				ol.HealthBreakdown = struct {
-					Volume    int `json:"volume"`
-					Trend     int `json:"trend"`
-					Frequency int `json:"frequency"`
-				}{
-					Volume:    ohs.Breakdown["volume"],
-					Trend:     ohs.Breakdown["trend"],
-					Frequency: ohs.Breakdown["frequency"],
-				}
-				daysSince := 99
-				if lastOrder != nil {
-					daysSince = int(now.Sub(*lastOrder).Hours() / 24)
-				}
-				if daysSince == 0 {
-					ol.LastOrder = "Today"
-				} else {
-					ol.LastOrder = fmt.Sprintf("%d days ago", daysSince)
-				}
-				if ohs.Score < 40 {
-					s := "Unhealthy Outlet"
-					ol.Alert = &s
-				} else if ohs.Score < 70 {
-					s := "Needs Attention"
-					ol.Alert = &s
-				}
-				outlets = append(outlets, ol)
+	olRows, err := db.Pool.Query(ctx,
+		`SELECT o.id, o.name, o.type, o.address, o.contact_person, o.branch_area,
+			COALESCE(SUM(CASE WHEN sr.record_date >= $1 AND sr.record_date <= $2 THEN sr.volume_be ELSE 0 END), 0) as be_current,
+			COALESCE(SUM(CASE WHEN sr.record_date >= $3 AND sr.record_date <= $4 THEN sr.volume_be ELSE 0 END), 0) as be_prev,
+			COALESCE(SUM(CASE WHEN sr.record_date >= $5 AND sr.record_date <= $6 THEN sr.volume_be ELSE 0 END), 0) as be_prev2,
+			COALESCE(SUM(CASE WHEN sr.record_date >= $1 AND sr.record_date <= $2 THEN 1 ELSE 0 END), 0) as freq_3mo,
+		MAX(sr.record_date)::text as last_order
+		 FROM outlets o
+		 LEFT JOIN sales_records sr ON sr.outlet_id = o.id AND sr.sales_id = ANY($7::uuid[])
+		 GROUP BY o.id, o.name, o.type, o.address, o.contact_person, o.branch_area`,
+		start, end, prevStart, prevEnd, prev2Start, prev2End, teamIDs,
+	)
+	if err == nil {
+		defer olRows.Close()
+		now := time.Now()
+		for olRows.Next() {
+			var oType string
+			var beCurrent, bePrev, bePrev2 float64
+			var freq3Mo int
+			var lastOrder *string
+			var ol models.OutletHealth
+			if err := olRows.Scan(&ol.ID, &ol.Name, &oType, &ol.Address, &ol.Contact, &ol.BranchArea,
+				&beCurrent, &bePrev, &bePrev2, &freq3Mo, &lastOrder); err != nil {
+				continue
 			}
+			ol.Type = oType
+			ohs := utils.CalculateOHS(beCurrent, bePrev, bePrev2, freq3Mo)
+			ol.Health = ohs.Score
+			ol.TotalBE3Mo = ohs.TotalBE
+			ol.AvgBE = ohs.AvgBE
+			ol.Trend = ohs.Trend
+			ol.Freq3Mo = ohs.Freq3Mo
+			ol.HealthBreakdown = struct {
+				Volume    int `json:"volume"`
+				Trend     int `json:"trend"`
+				Frequency int `json:"frequency"`
+			}{
+				Volume:    ohs.Breakdown["volume"],
+				Trend:     ohs.Breakdown["trend"],
+				Frequency: ohs.Breakdown["frequency"],
+			}
+			daysSince := 99
+			if lastOrder != nil {
+				if t, err := time.Parse("2006-01-02", *lastOrder); err == nil {
+					daysSince = int(now.Sub(t).Hours() / 24)
+				}
+			}
+			if daysSince == 0 {
+				ol.LastOrder = "Today"
+			} else {
+				ol.LastOrder = fmt.Sprintf("%d days ago", daysSince)
+			}
+			if ohs.Score < 40 {
+				s := "Unhealthy Outlet"
+				ol.Alert = &s
+			} else if ohs.Score < 70 {
+				s := "Needs Attention"
+				ol.Alert = &s
+			}
+			outlets = append(outlets, ol)
 		}
 	}
 

@@ -40,6 +40,7 @@ export default function ProfileView({ role, dashboardData, onLogout, onProfileUp
   const [passwordForm, setPasswordForm] = useState({ current: '', new: '', confirm: '' });
   const [showPassword, setShowPassword] = useState({ current: false, new: false, confirm: false });
   const [savingPassword, setSavingPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
 
   const fetchProfile = useCallback(async () => {
     setLoading(true);
@@ -106,12 +107,17 @@ export default function ProfileView({ role, dashboardData, onLogout, onProfileUp
 
   const handleChangePassword = async (e) => {
     e.preventDefault();
+    setPasswordError('');
+    if (!passwordForm.current.trim()) {
+      setPasswordError(t('profileView.currentPasswordRequired'));
+      return;
+    }
     if (passwordForm.new.length < 6) {
-      setError(t('profileView.passwordMin'));
+      setPasswordError(t('profileView.passwordMin'));
       return;
     }
     if (passwordForm.new !== passwordForm.confirm) {
-      setError(t('profileView.passwordMismatch'));
+      setPasswordError(t('profileView.passwordMismatch'));
       return;
     }
     setSavingPassword(true);
@@ -121,7 +127,7 @@ export default function ProfileView({ role, dashboardData, onLogout, onProfileUp
       const res = await fetch('/api?type=profile', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ password: passwordForm.new })
+        body: JSON.stringify({ password: passwordForm.new, current_password: passwordForm.current })
       });
       if (!res.ok) throw new Error('Failed to update password');
       setShowChangePassword(false);
@@ -277,7 +283,7 @@ export default function ProfileView({ role, dashboardData, onLogout, onProfileUp
 
           {/* Change Password */}
           <button
-            onClick={() => setShowChangePassword(true)}
+            onClick={() => { setShowChangePassword(true); setPasswordError(''); }}
             className="w-full flex items-center justify-between p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-b border-slate-100 dark:border-slate-800"
           >
             <div className="flex items-center gap-3">
@@ -394,13 +400,19 @@ export default function ProfileView({ role, dashboardData, onLogout, onProfileUp
               </button>
             </div>
             <form onSubmit={handleChangePassword} className="space-y-4">
+              {passwordError && (
+                <div className="bg-red-50 dark:bg-red-950/30 border border-red-100 dark:border-red-900/50 text-red-700 dark:text-red-400 px-3 py-2 rounded-xl flex items-center gap-2 text-xs font-medium">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  {passwordError}
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-medium text-slate-500 mb-1 ml-1">{t('profileView.currentPassword')}</label>
                 <div className="relative">
                   <input
                     type={showPassword.current ? 'text' : 'password'}
                     value={passwordForm.current}
-                    onChange={e => setPasswordForm({ ...passwordForm, current: e.target.value })}
+                    onChange={e => { setPasswordForm({ ...passwordForm, current: e.target.value }); setPasswordError(''); }}
                     className="w-full px-4 py-3 pr-10 border border-slate-200 dark:border-slate-700 rounded-xl bg-transparent dark:bg-slate-800 focus:ring-2 focus:ring-emerald-500 outline-none text-sm font-medium"
                     placeholder="••••••••"
                   />
@@ -417,7 +429,7 @@ export default function ProfileView({ role, dashboardData, onLogout, onProfileUp
                     required
                     minLength={6}
                     value={passwordForm.new}
-                    onChange={e => setPasswordForm({ ...passwordForm, new: e.target.value })}
+                    onChange={e => { setPasswordForm({ ...passwordForm, new: e.target.value }); setPasswordError(''); }}
                     className="w-full px-4 py-3 pr-10 border border-slate-200 dark:border-slate-700 rounded-xl bg-transparent dark:bg-slate-800 focus:ring-2 focus:ring-emerald-500 outline-none text-sm font-medium"
                     placeholder={t('profileView.min6Chars')}
                   />
@@ -433,7 +445,7 @@ export default function ProfileView({ role, dashboardData, onLogout, onProfileUp
                     type={showPassword.confirm ? 'text' : 'password'}
                     required
                     value={passwordForm.confirm}
-                    onChange={e => setPasswordForm({ ...passwordForm, confirm: e.target.value })}
+                    onChange={e => { setPasswordForm({ ...passwordForm, confirm: e.target.value }); setPasswordError(''); }}
                     className="w-full px-4 py-3 pr-10 border border-slate-200 dark:border-slate-700 rounded-xl bg-transparent dark:bg-slate-800 focus:ring-2 focus:ring-emerald-500 outline-none text-sm font-medium"
                     placeholder={t('profileView.repeatPassword')}
                   />
