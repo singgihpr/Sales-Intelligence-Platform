@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from '../lib/i18n.jsx';
-import { Upload, RefreshCw, Edit2, Trash2, Plus, Users, Database, Store, X, LogOut, ArrowLeft, Link2, Target, Award, Download, FileSpreadsheet, Search, ChevronLeft, ChevronRight, UserCheck, Gift } from 'lucide-react';
+import { Upload, RefreshCw, Edit2, Trash2, Plus, Users, Database, Store, X, LogOut, ArrowLeft, Link2, Target, Award, Download, FileSpreadsheet, Search, ChevronLeft, ChevronRight, UserCheck, Gift, Loader2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { AlertModal, ConfirmModal } from '../components/Modal';
 
 function PaginationControls({ type, meta, onChange }) {
   const { t } = useTranslation();
@@ -51,8 +52,8 @@ export default function AdminDashboard() {
   const { t, dateLocale } = useTranslation();
   const [activeTab, setActiveTab] = useState('records');
   const [loading, setLoading] = useState(true);
-  const [message, setMessage] = useState('');
-  const [messageType, setMessageType] = useState('');
+  const [alert, setAlert] = useState(null);
+  const [confirm, setConfirm] = useState(null);
   const [records, setRecords] = useState([]);
   const [users, setUsers] = useState([]);
   const [outlets, setOutlets] = useState([]);
@@ -147,7 +148,7 @@ export default function AdminDashboard() {
       if (type === 'targets') setTargets(list);
       if (type === 'sku-incentives') setSkuIncentives(list);
       setPagination(prev => ({ ...prev, [type]: { ...prev[type], page, limit, total, search } }));
-    } catch (e) { setMessage(t('adminDashboard.messages.fetchError', { type, message: e.message })); setMessageType('error'); }
+    } catch (e) { setAlert({ type: 'error', message: t('adminDashboard.messages.fetchError', { type, message: e.message }) }); }
   };
 
   const fetchAllSalesUsers = async () => {
@@ -210,18 +211,18 @@ export default function AdminDashboard() {
         await Promise.all([fetchAllSupervisors(), fetchAllSalesUsers()]);
       }
       resetState();
-      setMessage(t('adminDashboard.messages.crudSuccess', { type, action: t('adminDashboard.crud.' + method) })); setMessageType('success');
-    } catch (e) { setMessage(t('adminDashboard.messages.error', { message: e.message })); setMessageType('error'); }
+      setAlert({ type: 'success', message: t('adminDashboard.messages.crudSuccess', { type, action: t('adminDashboard.crud.' + method) }) });
+    } catch (e) { setAlert({ type: 'error', message: t('adminDashboard.messages.error', { message: e.message }) }); }
   };
 
   // Inline assignment for single vacant outlet
   const handleInlineAssign = async (outletId, salesmanId) => {
     if (!salesmanId) {
-      setMessage(t('adminDashboard.messages.selectSalesmanFirst')); setMessageType('error');
+      setAlert({ type: 'error', message: t('adminDashboard.messages.selectSalesmanFirst') });
       return;
     }
     setAssigningOutlets(prev => new Set(prev).add(outletId));
-    setMessage(''); setMessageType('');
+    setAlert(null);
     try {
       const url = `/api?type=assignments`;
       const res = await fetch(url, {
@@ -232,11 +233,11 @@ export default function AdminDashboard() {
       if (!res.ok) throw new Error(await res.text());
       await fetchTable('vacant');
       await fetchTable('assignments');
-      setMessage(t('adminDashboard.messages.outletAssigned')); setMessageType('success');
+      setAlert({ type: 'success', message: t('adminDashboard.messages.outletAssigned') });
       // Remove from selected if it was selected
       setSelectedVacantIds(prev => prev.filter(id => id !== outletId));
     } catch (e) {
-      setMessage(t('adminDashboard.messages.error', { message: e.message })); setMessageType('error');
+      setAlert({ type: 'error', message: t('adminDashboard.messages.error', { message: e.message }) });
     } finally {
       setAssigningOutlets(prev => {
         const next = new Set(prev);
@@ -249,16 +250,16 @@ export default function AdminDashboard() {
   // Bulk assignment for multiple vacant outlets
   const handleBulkAssign = async () => {
     if (!bulkSalesmanId) {
-      setMessage(t('adminDashboard.messages.selectSalesmanBulk')); setMessageType('error');
+      setAlert({ type: 'error', message: t('adminDashboard.messages.selectSalesmanBulk') });
       return;
     }
     if (selectedVacantIds.length === 0) {
-      setMessage(t('adminDashboard.messages.noOutletsSelected')); setMessageType('error');
+      setAlert({ type: 'error', message: t('adminDashboard.messages.noOutletsSelected') });
       return;
     }
     setBulkAssigning(true);
     setBulkProgress({ current: 0, total: selectedVacantIds.length });
-    setMessage(''); setMessageType('');
+    setAlert(null);
     let success = 0;
     let failed = 0;
     for (let i = 0; i < selectedVacantIds.length; i++) {
@@ -285,9 +286,9 @@ export default function AdminDashboard() {
     setBulkAssigning(false);
     setBulkProgress({ current: 0, total: 0 });
     if (failed === 0) {
-      setMessage(t('adminDashboard.messages.assignedSuccess', { success })); setMessageType('success');
+      setAlert({ type: 'success', message: t('adminDashboard.messages.assignedSuccess', { success }) });
     } else {
-      setMessage(t('adminDashboard.messages.assignResult', { success, failed })); setMessageType(failed > 0 ? 'error' : 'success');
+      setAlert({ type: failed > 0 ? 'error' : 'success', message: t('adminDashboard.messages.assignResult', { success, failed }) });
     }
   };
 
@@ -316,31 +317,31 @@ export default function AdminDashboard() {
   };
 
   const handlePreview = async () => {
-    if (!uploadFile) { setMessage(t('adminDashboard.messages.selectFileFirst')); setMessageType('error'); return; }
+    if (!uploadFile) { setAlert({ type: 'error', message: t('adminDashboard.messages.selectFileFirst') }); return; }
     setPreviewLoading(true);
-    setMessage(''); setMessageType('');
+    setAlert(null);
     const fd = new FormData(); fd.append('file', uploadFile);
     try {
       const res = await fetch('/api?action=preview', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: fd });
       if (!res.ok) throw new Error(await res.text());
       const d = await res.json();
       setPreviewData(d);
-      setMessage(t('adminDashboard.messages.previewSummary', { valid: d.valid, invalid: d.invalid, total: d.total })); setMessageType('success');
-    } catch (e) { setMessage(t('adminDashboard.messages.previewFailed', { message: e.message })); setMessageType('error'); }
+      setAlert({ type: 'success', message: t('adminDashboard.messages.previewSummary', { valid: d.valid, invalid: d.invalid, total: d.total }) });
+    } catch (e) { setAlert({ type: 'error', message: t('adminDashboard.messages.previewFailed', { message: e.message }) }); }
     finally { setPreviewLoading(false); }
   };
 
   const handleUpload = async () => {
-    if (!uploadFile) { setMessage(t('adminDashboard.messages.selectFileFirst')); setMessageType('error'); return; }
+    if (!uploadFile) { setAlert({ type: 'error', message: t('adminDashboard.messages.selectFileFirst') }); return; }
     if (uploadLoading) return;
     setUploadLoading(true);
-    setMessage(''); setMessageType('');
+    setAlert(null);
     const fd = new FormData(); fd.append('file', uploadFile);
     try {
       const res = await fetch('/api', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: fd });
       if (!res.ok) throw new Error(res.status);
-      const d = await res.json(); setMessage(t('adminDashboard.messages.uploadedRecords', { inserted: d.inserted }) + (d.assignmentsCreated ? ' ' + t('adminDashboard.messages.outletsAssigned', { count: d.assignmentsCreated }) : '') + (d.assignmentsUpdated ? ' ' + t('adminDashboard.messages.reassigned', { count: d.assignmentsUpdated }) : '')); setMessageType('success'); await fetchTable('records'); setPreviewData(null); setUploadFile(null);
-    } catch(e) { setMessage(t('adminDashboard.messages.uploadFailed')); setMessageType('error'); }
+      const d = await res.json(); setAlert({ type: 'success', message: t('adminDashboard.messages.uploadedRecords', { inserted: d.inserted }) + (d.assignmentsCreated ? ' ' + t('adminDashboard.messages.outletsAssigned', { count: d.assignmentsCreated }) : '') + (d.assignmentsUpdated ? ' ' + t('adminDashboard.messages.reassigned', { count: d.assignmentsUpdated }) : '') }); await fetchTable('records'); setPreviewData(null); setUploadFile(null);
+    } catch(e) { setAlert({ type: 'error', message: t('adminDashboard.messages.uploadFailed') }); }
     finally { setUploadLoading(false); }
   };
 
@@ -420,7 +421,7 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {message && <div className="max-w-[1400px] mx-auto px-6 lg:px-10 mt-4"><div className={`p-3 rounded-lg text-sm font-medium ${messageType === 'success' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400' : 'bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-400'}`}>{message} <button onClick={() => { setMessage(''); setMessageType(''); }} className="ml-2 underline">{t('adminDashboard.common.dismiss')}</button></div></div>}
+      <AlertModal open={!!alert} type={alert?.type} message={alert?.message} onClose={() => setAlert(null)} />
 
       <main className="max-w-[1400px] mx-auto px-6 lg:px-10 py-6">
         {activeTab === 'records' && (
@@ -542,7 +543,7 @@ export default function AdminDashboard() {
                   records.length === 0 ? <tr><td colSpan="6" className="px-4 py-8 text-center text-slate-400">{t('adminDashboard.records.empty')}</td></tr> :
                   records.map(r => (<tr key={r.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                     <td className="px-4 py-3 font-medium">{r.outlet}</td><td className="px-4 py-3">{r.sales}</td><td className="px-4 py-3 font-mono text-xs">{r.date}</td><td className="px-4 py-3 text-slate-500">{r.sku||'-'}</td><td className="px-4 py-3 font-bold text-emerald-600">{parseFloat(r.be).toFixed(1)}</td>
-                    <td className="px-4 py-3 flex gap-2 justify-end"><button onClick={()=>openRecordEdit(r)} className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg"><Edit2 className="w-4 h-4"/></button><button onClick={()=>handleCrud('records','DELETE',r.id,{},setRecords,()=>{})} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg"><Trash2 className="w-4 h-4"/></button></td>
+                    <td className="px-4 py-3 flex gap-2 justify-end"><button onClick={()=>openRecordEdit(r)} className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg"><Edit2 className="w-4 h-4"/></button><button onClick={()=>setConfirm({ title: t('adminDashboard.messages.confirmTitle'), message: t('adminDashboard.messages.confirmDelete', { type: 'record' }), onConfirm: () => handleCrud('records','DELETE',r.id,{},setRecords,()=>{}) })} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg"><Trash2 className="w-4 h-4"/></button></td>
                   </tr>))}
                 </tbody>
               </table></div>
@@ -575,7 +576,7 @@ export default function AdminDashboard() {
                   outlets.length === 0 ? <tr><td colSpan="6" className="px-4 py-8 text-center text-slate-400">{t('adminDashboard.outlets.empty')}</td></tr> :
                   outlets.map(o => (<tr key={o.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                     <td className="px-4 py-3 font-medium">{o.name}</td><td className="px-4 py-3">{o.type||'-'}</td><td className="px-4 py-3">{o.branch_area||'-'}</td><td className="px-4 py-3 text-slate-500">{o.address||'-'}</td><td className="px-4 py-3 text-slate-500">{o.contact_person||'-'}</td>
-                    <td className="px-4 py-3 flex gap-2 justify-end"><button onClick={()=>openOutletEdit(o)} className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg"><Edit2 className="w-4 h-4"/></button><button onClick={()=>handleCrud('outlets','DELETE',o.id,{},setOutlets,()=>{})} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg"><Trash2 className="w-4 h-4"/></button></td>
+                    <td className="px-4 py-3 flex gap-2 justify-end"><button onClick={()=>openOutletEdit(o)} className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg"><Edit2 className="w-4 h-4"/></button><button onClick={()=>setConfirm({ title: t('adminDashboard.messages.confirmTitle'), message: t('adminDashboard.messages.confirmDelete', { type: 'outlet' }), onConfirm: () => handleCrud('outlets','DELETE',o.id,{},setOutlets,()=>{}) })} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg"><Trash2 className="w-4 h-4"/></button></td>
                   </tr>))}
                 </tbody>
               </table></div>
@@ -614,7 +615,7 @@ export default function AdminDashboard() {
                     <td className="px-4 py-3"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${u.role==='admin'?'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-400':u.role==='supervisor'?'bg-blue-100 text-blue-700':'bg-emerald-100 text-emerald-700'}`}>{u.role}</span></td>
                     <td className="px-4 py-3 text-slate-500">{u.level||'-'}</td>
                     <td className="px-4 py-3 text-slate-500">{u.region||'-'}</td>
-                    <td className="px-4 py-3 flex gap-2 justify-end"><button onClick={()=>openUserEdit(u)} className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg"><Edit2 className="w-4 h-4"/></button><button onClick={()=>{if(window.confirm(t('adminDashboard.messages.confirmDelete'))) handleCrud('users','DELETE',u.id,{},setUsers,()=>{})}} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg"><Trash2 className="w-4 h-4"/></button></td>
+                    <td className="px-4 py-3 flex gap-2 justify-end"><button onClick={()=>openUserEdit(u)} className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg"><Edit2 className="w-4 h-4"/></button><button onClick={()=>setConfirm({ title: t('adminDashboard.messages.confirmTitle'), message: t('adminDashboard.messages.confirmDelete', { type: 'user' }), onConfirm: () => handleCrud('users','DELETE',u.id,{},setUsers,()=>{}) })} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg"><Trash2 className="w-4 h-4"/></button></td>
                   </tr>))}
                 </tbody>
               </table></div>
@@ -823,8 +824,8 @@ export default function AdminDashboard() {
                                         });
                                         if (!res.ok) throw new Error(await res.text());
                                         await Promise.all([fetchAllSalesUsers(), fetchAllSupervisors()]);
-                                        setMessage(t('adminDashboard.messages.unassignedFromSupervisor', { name: u.name })); setMessageType('success');
-                                      } catch (e) { setMessage(t('adminDashboard.messages.error', { message: e.message })); setMessageType('error'); }
+                                        setAlert({ type: 'success', message: t('adminDashboard.messages.unassignedFromSupervisor', { name: u.name }) });
+                                      } catch (e) { setAlert({ type: 'error', message: t('adminDashboard.messages.error', { message: e.message }) }); }
                                     }}
                                     className="px-3 py-1.5 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded-lg text-xs font-bold"
                                   >
@@ -870,8 +871,8 @@ export default function AdminDashboard() {
                         </div>
                         <button
                           onClick={async () => {
-                            if (checkedSalesmen.length === 0) { setMessage(t('adminDashboard.messages.noSalesmenSelected')); setMessageType('error'); return; }
-                            setMessage(''); setMessageType('');
+                            if (checkedSalesmen.length === 0) { setAlert({ type: 'error', message: t('adminDashboard.messages.noSalesmenSelected') }); return; }
+                            setAlert(null);
                             let success = 0, failed = 0;
                             for (const sid of checkedSalesmen) {
                               const salesUser = allSalesUsers.find(u => u.id === sid);
@@ -888,7 +889,7 @@ export default function AdminDashboard() {
                             }
                             await Promise.all([fetchAllSalesUsers(), fetchAllSupervisors()]);
                             setCheckedSalesmen([]);
-                            setMessage(success > 0 ? t('adminDashboard.messages.assignResult', { success, failed }) : t('adminDashboard.messages.allFailed')); setMessageType(success > 0 && failed === 0 ? 'success' : 'error');
+                            setAlert({ type: success > 0 && failed === 0 ? 'success' : 'error', message: success > 0 ? t('adminDashboard.messages.assignResult', { success, failed }) : t('adminDashboard.messages.allFailed') });
                           }}
                           disabled={checkedSalesmen.length === 0}
                           className="mt-4 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -943,7 +944,7 @@ export default function AdminDashboard() {
                       <td className="px-4 py-3 text-xs text-slate-500">{pc.base_reward ? formatRp(pc.base_reward) : '-'}</td>
                       <td className="px-4 py-3 text-xs text-slate-500">{vc.length ? vc.map(v=>`${v.threshold}BE`).join(', ') : '-'}</td>
                       <td className="px-4 py-3 text-xs text-slate-500">{ac.base_reward ? formatRp(ac.base_reward) : '-'}</td>
-                      <td className="px-4 py-3 flex gap-2 justify-end"><button onClick={()=>openTargetEdit(t)} className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg"><Edit2 className="w-4 h-4"/></button><button onClick={()=>handleCrud('targets','DELETE',t.id,{},setTargets,()=>{})} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg"><Trash2 className="w-4 h-4"/></button></td>
+                      <td className="px-4 py-3 flex gap-2 justify-end"><button onClick={()=>openTargetEdit(t)} className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg"><Edit2 className="w-4 h-4"/></button><button onClick={()=>setConfirm({ title: t('adminDashboard.messages.confirmTitle'), message: t('adminDashboard.messages.confirmDelete', { type: 'target' }), onConfirm: () => handleCrud('targets','DELETE',t.id,{},setTargets,()=>{}) })} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg"><Trash2 className="w-4 h-4"/></button></td>
                     </tr>);
                   })}
                 </tbody>
@@ -1023,7 +1024,7 @@ export default function AdminDashboard() {
                       <td className="px-4 py-3 text-xs text-slate-500 max-w-[120px] truncate" title={inc.notes}>{inc.notes || '-'}</td>
                       <td className="px-4 py-3 flex gap-2 justify-end">
                         <button onClick={()=>{ setEditingSkuInc(inc); setSkuIncForm({ sku_name: inc.sku_name, bonus_be: inc.bonus_be, start_date: inc.start_date, end_date: inc.end_date, is_active: inc.is_active, notes: inc.notes || '' }); setShowSkuIncForm(true); }} className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg"><Edit2 className="w-4 h-4"/></button>
-                        <button onClick={()=>handleCrud('sku-incentives','DELETE',inc.id,{},()=>fetchTable('sku-incentives'),()=>{})} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg"><Trash2 className="w-4 h-4"/></button>
+                        <button onClick={()=>setConfirm({ title: t('adminDashboard.messages.confirmTitle'), message: t('adminDashboard.messages.confirmDelete', { type: 'SKU incentive' }), variant: 'danger', onConfirm: () => handleCrud('sku-incentives','DELETE',inc.id,{},()=>fetchTable('sku-incentives'),()=>{}) })} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg"><Trash2 className="w-4 h-4"/></button>
                       </td>
                     </tr>
                   ))}
@@ -1034,6 +1035,29 @@ export default function AdminDashboard() {
         )}
 
       </main>
+
+      <ConfirmModal
+        open={!!confirm}
+        title={confirm?.title}
+        message={confirm?.message}
+        confirmLabel={confirm?.confirmLabel || t('adminDashboard.common.delete')}
+        variant={confirm?.variant || 'danger'}
+        onConfirm={confirm?.onConfirm || (() => {})}
+        onClose={() => setConfirm(null)}
+      />
+
+      {bulkAssigning && (
+        <div className="fixed inset-0 z-[80] bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-xs p-6 text-center">
+            <Loader2 className="w-8 h-8 animate-spin text-emerald-600 mx-auto mb-3" />
+            <p className="text-sm font-bold text-slate-900 dark:text-white">{t('adminDashboard.messages.confirmBulkAssign')}</p>
+            <p className="text-xs text-slate-500 mt-1">{t('adminDashboard.messages.confirmBulkAssignProgress', { current: bulkProgress.current, total: bulkProgress.total })}</p>
+            <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 mt-3 overflow-hidden">
+              <div className="h-full bg-emerald-500 rounded-full transition-all duration-300" style={{ width: `${(bulkProgress.current / bulkProgress.total) * 100}%` }} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

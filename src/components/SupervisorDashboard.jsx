@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Users, AlertTriangle, Target, Award, Store, ChevronRight, ArrowLeft, CheckCircle, X } from 'lucide-react';
 import { SkuAnalysisSection } from './SalesDashboard';
 import { useTranslation } from '../lib/i18n.jsx';
+import { AlertModal } from './Modal';
 
 const formatRp = (n) => 'Rp ' + (Number(n) || 0).toLocaleString('id-ID');
 
@@ -15,7 +16,7 @@ export default function SupervisorDashboard({ data, onNavigate }) {
   const { t } = useTranslation();
   const { team, teamStats } = data || {};
   const [configPanelOpen, setConfigPanelOpen] = useState(false);
-  const [message, setMessage] = useState('');
+  const [alert, setAlert] = useState(null);
   const token = localStorage.getItem('token');
 
   // Use team members directly for target config
@@ -37,9 +38,8 @@ export default function SupervisorDashboard({ data, onNavigate }) {
         body: JSON.stringify(body)
       });
       if (!res.ok) throw new Error(await res.text());
-      setMessage(`✅ ${t('supervisorDashboard.targetUpdated')}`);
-      setTimeout(() => setMessage(''), 2000);
-    } catch (err) { setMessage(`❌ ${err.message}`); }
+      setAlert({ type: 'success', message: t('supervisorDashboard.targetUpdated') });
+    } catch (err) { setAlert({ type: 'error', message: err.message }); }
   };
 
   if (!team) return <div className="text-center text-slate-400 py-20">{t('supervisorDashboard.loading')}</div>;
@@ -100,7 +100,7 @@ export default function SupervisorDashboard({ data, onNavigate }) {
 
       {configPanelOpen && (
         <Card className="space-y-4">
-          {message && <div className={`text-xs font-bold p-2 rounded-lg ${message.includes('✅') ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>{message}</div>}
+          <AlertModal open={!!alert} type={alert?.type} message={alert?.message} onClose={() => setAlert(null)} />
           <h3 className="font-bold text-slate-900 dark:text-white">{t('supervisorDashboard.setTargetBonusTitle')}</h3>
           <TargetConfigForm users={teamUsers} onSave={handleSaveTarget} />
         </Card>

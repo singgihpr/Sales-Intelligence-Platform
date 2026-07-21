@@ -409,7 +409,10 @@ const dictionaries = {
         unassignedFromSupervisor: '{{name}} berhasil dilepas dari supervisor',
         noSalesmenSelected: 'Tidak ada salesman yang dipilih',
         allFailed: 'Semua gagal',
-        confirmDelete: 'Yakin ingin menghapus user ini?',
+        confirmDelete: 'Yakin ingin menghapus {{type}} ini?',
+        confirmTitle: 'Konfirmasi Hapus',
+        confirmBulkAssign: 'Menugaskan outlet...',
+        confirmBulkAssignProgress: '{{current}} dari {{total}}',
       },
       crud: {
         POST: 'dibuat',
@@ -994,7 +997,10 @@ const dictionaries = {
         unassignedFromSupervisor: '{{name}} unassigned from supervisor',
         noSalesmenSelected: 'No salesmen selected',
         allFailed: 'All failed',
-        confirmDelete: 'Are you sure you want to delete this user?',
+        confirmDelete: 'Are you sure you want to delete this {{type}}?',
+        confirmTitle: 'Confirm Delete',
+        confirmBulkAssign: 'Assigning outlets...',
+        confirmBulkAssignProgress: '{{current}} of {{total}}',
       },
       crud: {
         POST: 'created',

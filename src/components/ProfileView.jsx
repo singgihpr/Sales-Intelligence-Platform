@@ -5,6 +5,7 @@ import {
   Smartphone, Target, Wallet, Edit3, X, Globe
 } from 'lucide-react';
 import { useTranslation } from '../lib/i18n.jsx';
+import { AlertModal } from './Modal';
 
 const Card = ({ children, className = '' }) => (
   <div className={`bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-5 ${className}`}>
@@ -26,8 +27,7 @@ export default function ProfileView({ role, dashboardData, onLogout, onProfileUp
   const { t, language, setLanguage } = useTranslation();
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [message, setMessage] = useState('');
+  const [alert, setAlert] = useState(null);
   const [darkMode, setDarkMode] = useState(getInitialDarkMode);
 
   // Edit name states
@@ -54,7 +54,7 @@ export default function ProfileView({ role, dashboardData, onLogout, onProfileUp
       setProfile(data.data);
       setEditName(data.data?.name || '');
     } catch (e) {
-      setError(e.message);
+      setAlert({ type: 'error', message: e.message });
     } finally {
       setLoading(false);
     }
@@ -63,13 +63,6 @@ export default function ProfileView({ role, dashboardData, onLogout, onProfileUp
   useEffect(() => {
     fetchProfile();
   }, [fetchProfile]);
-
-  useEffect(() => {
-    if (message) {
-      const timer = setTimeout(() => setMessage(''), 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [message]);
 
   useEffect(() => {
     if (darkMode) {
@@ -96,10 +89,10 @@ export default function ProfileView({ role, dashboardData, onLogout, onProfileUp
       const data = await res.json();
       setProfile(data.data);
       setShowEditName(false);
-      setMessage(t('profileView.nameUpdated'));
+      setAlert({ type: 'success', message: t('profileView.nameUpdated') });
       onProfileUpdate && onProfileUpdate(data.data);
     } catch (e) {
-      setError(e.message);
+      setAlert({ type: 'error', message: e.message });
     } finally {
       setSavingName(false);
     }
@@ -121,7 +114,7 @@ export default function ProfileView({ role, dashboardData, onLogout, onProfileUp
       return;
     }
     setSavingPassword(true);
-    setError('');
+    setAlert(null);
     try {
       const token = localStorage.getItem('token');
       const res = await fetch('/api?type=profile', {
@@ -132,9 +125,9 @@ export default function ProfileView({ role, dashboardData, onLogout, onProfileUp
       if (!res.ok) throw new Error('Failed to update password');
       setShowChangePassword(false);
       setPasswordForm({ current: '', new: '', confirm: '' });
-      setMessage(t('profileView.passwordUpdated'));
+      setAlert({ type: 'success', message: t('profileView.passwordUpdated') });
     } catch (e) {
-      setError(e.message);
+      setAlert({ type: 'error', message: e.message });
     } finally {
       setSavingPassword(false);
     }
@@ -165,19 +158,7 @@ export default function ProfileView({ role, dashboardData, onLogout, onProfileUp
         <p className="text-sm text-slate-500">{t('profileView.subtitle')}</p>
       </section>
 
-      {message && (
-        <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/50 text-emerald-700 dark:text-emerald-400 px-4 py-3 rounded-xl flex items-center gap-2 text-sm font-medium">
-          <CheckCircle className="w-4 h-4" />
-          {message}
-        </div>
-      )}
-      {error && (
-        <div className="bg-red-50 dark:bg-red-950/30 border border-red-100 dark:border-red-900/50 text-red-700 dark:text-red-400 px-4 py-3 rounded-xl flex items-center gap-2 text-sm font-medium">
-          <AlertCircle className="w-4 h-4" />
-          {error}
-          <button onClick={() => setError('')} className="ml-auto text-xs font-bold underline">{t('profileView.close')}</button>
-        </div>
-      )}
+      <AlertModal open={!!alert} type={alert?.type} message={alert?.message} onClose={() => setAlert(null)} />
 
       {/* Profile Card */}
       <Card className="flex items-center gap-4">

@@ -22,6 +22,33 @@ type UserHandler struct {
 	DefaultPassword string
 }
 
+func validatePassword(s string) error {
+	if len(s) < 12 {
+		return fmt.Errorf("Password must be at least 12 characters")
+	}
+	var hasUpper, hasLower, hasDigit bool
+	for _, c := range s {
+		switch {
+		case c >= 'A' && c <= 'Z':
+			hasUpper = true
+		case c >= 'a' && c <= 'z':
+			hasLower = true
+		case c >= '0' && c <= '9':
+			hasDigit = true
+		}
+	}
+	if !hasUpper {
+		return fmt.Errorf("Password must contain at least one uppercase letter")
+	}
+	if !hasLower {
+		return fmt.Errorf("Password must contain at least one lowercase letter")
+	}
+	if !hasDigit {
+		return fmt.Errorf("Password must contain at least one digit")
+	}
+	return nil
+}
+
 func (h *UserHandler) GetProfile(c echo.Context) error {
 	user := middleware.GetUser(c)
 	if user == nil {
@@ -132,6 +159,10 @@ func (h *UserHandler) CreateUser(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Password or DEFAULT_PASSWORD env var is required"})
 	}
 
+	if err := validatePassword(password); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+	}
+
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to hash password"})
@@ -177,6 +208,9 @@ func (h *UserHandler) UpdateUser(c echo.Context) error {
 
 	var passwordHash *string
 	if req.Password != "" && req.Password != "••••••" {
+		if err := validatePassword(req.Password); err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+		}
 		hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Failed to hash password"})
@@ -270,6 +304,9 @@ func (h *UserHandler) UpdateProfile(c echo.Context) error {
 		}
 		if err := bcrypt.CompareHashAndPassword([]byte(currentHash), []byte(req.CurrentPassword)); err != nil {
 			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "Current password is incorrect"})
+		}
+		if err := validatePassword(req.Password); err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 		}
 		hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 		if err != nil {
