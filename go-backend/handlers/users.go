@@ -121,6 +121,9 @@ func (h *UserHandler) CreateUser(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request"})
 	}
 
+	if req.Level != nil && *req.Level == "" { req.Level = nil }
+	if req.SupervisorID != nil && *req.SupervisorID == "" { req.SupervisorID = nil }
+
 	password := req.Password
 	if password == "" {
 		password = h.DefaultPassword
@@ -168,6 +171,9 @@ func (h *UserHandler) UpdateUser(c echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request"})
 	}
+
+	if req.Level != nil && *req.Level == "" { req.Level = nil }
+	if req.SupervisorID != nil && *req.SupervisorID == "" { req.SupervisorID = nil }
 
 	var passwordHash *string
 	if req.Password != "" && req.Password != "••••••" {
