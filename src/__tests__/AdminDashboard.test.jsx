@@ -136,15 +136,13 @@ describe('AdminDashboard AlertModal on CRUD', () => {
       await userEvent.click(deleteBtn);
 
       await waitFor(() => screen.getByText('Konfirmasi Hapus'));
-      await userEvent.click(screen.getByText('adminDashboard.common.delete'));
+      await userEvent.click(screen.getByText('Hapus'));
 
       await waitFor(() => {
         expect(screen.getByText(/users telah dihapus/i)).toBeInTheDocument();
       });
     });
-  });
 
-  describe('handleCrud error', () => {
     it('shows error AlertModal when API call fails', async () => {
       setupDefaultMocks();
       mockUsersCreateThenRefresh(new Error('Email sudah digunakan'));
@@ -214,7 +212,7 @@ describe('AdminDashboard AlertModal on CRUD', () => {
       );
       await userEvent.click(deleteBtn);
       await waitFor(() => screen.getByText('Konfirmasi Hapus'));
-      await userEvent.click(screen.getByText('adminDashboard.common.delete'));
+      await userEvent.click(screen.getByText('Hapus'));
 
       await waitFor(() => {
         expect(screen.getByText(/users telah dihapus/i)).toBeInTheDocument();

@@ -623,7 +623,7 @@ export default function AdminDashboard() {
                   </div>
                   <div className="md:col-span-2">
                     <label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.role')}</label>
-                    <select value={userForm.role} onChange={e=>{const r=e.target.value; setUserForm({...userForm, role:r, supervisor_id: r!=='sales' ? '' : userForm.supervisor_id});}} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent"><option value="sales">{t('adminDashboard.common.sales')}</option><option value="supervisor">{t('adminDashboard.users.roles.supervisor')}</option><option value="admin">{t('adminDashboard.users.roles.admin')}</option></select>
+                    <select value={userForm.role} onChange={e=>{const r=e.target.value; setUserForm({...userForm, role:r, supervisor_id: r!=='sales' ? '' : userForm.supervisor_id, level: r==='supervisor' ? '' : userForm.level});}} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent"><option value="sales">{t('adminDashboard.common.sales')}</option><option value="supervisor">{t('adminDashboard.users.roles.supervisor')}</option><option value="admin">{t('adminDashboard.users.roles.admin')}</option></select>
                   </div>
                   {userForm.role === 'sales' && (
                   <div className="md:col-span-2">
@@ -633,10 +633,12 @@ export default function AdminDashboard() {
                   )}
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                  {userForm.role !== 'supervisor' && (
                   <div className="md:col-span-2">
                     <label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.level')}</label>
                     <select value={userForm.level||''} onChange={e=>setUserForm({...userForm, level:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent"><option value="">-</option><option value="L2">L2</option><option value="L3">L3</option></select>
                   </div>
+                  )}
                   <div className="md:col-span-5">
                     <label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.password')}</label>
                     <div className="relative">
