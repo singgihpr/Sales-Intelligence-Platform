@@ -633,7 +633,7 @@ export default function AdminDashboard() {
                   )}
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-                  {userForm.role !== 'supervisor' && (
+                  {userForm.role !== 'supervisor' && userForm.role !== 'admin' && (
                   <div className="md:col-span-2">
                     <label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.level')}</label>
                     <select value={userForm.level||''} onChange={e=>setUserForm({...userForm, level:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent"><option value="">-</option><option value="L2">L2</option><option value="L3">L3</option></select>
