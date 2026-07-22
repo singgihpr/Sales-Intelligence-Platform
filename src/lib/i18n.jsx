@@ -339,6 +339,7 @@ const dictionaries = {
       logout: 'Logout',
       common: {
         loading: 'Memuat...',
+        delete: 'Hapus',
         save: 'Simpan',
         dismiss: 'Tutup',
         search: 'Cari...',
@@ -484,6 +485,17 @@ const dictionaries = {
           regionPlaceholder: 'Region',
           passwordKeep: 'Biarkan kosong untuk mempertahankan',
           passwordInitial: 'Atur password awal',
+          togglePassword: 'Tampilkan/sembunyikan password',
+          errors: {
+            nameRequired: 'Nama wajib diisi',
+            emailRequired: 'Email wajib diisi',
+            emailInvalid: 'Format email tidak valid',
+            passwordRequired: 'Password wajib diisi',
+            passwordMinLength: 'Minimal 12 karakter',
+            passwordUppercase: 'Harus mengandung huruf besar',
+            passwordLowercase: 'Harus mengandung huruf kecil',
+            passwordDigit: 'Harus mengandung angka',
+          },
         },
         roles: {
           sales: 'Sales',
@@ -927,6 +939,7 @@ const dictionaries = {
       logout: 'Logout',
       common: {
         loading: 'Loading...',
+        delete: 'Delete',
         save: 'Save',
         dismiss: 'Dismiss',
         search: 'Search...',
@@ -1072,6 +1085,17 @@ const dictionaries = {
           regionPlaceholder: 'Region',
           passwordKeep: 'Leave blank to keep current',
           passwordInitial: 'Set initial password',
+          togglePassword: 'Toggle password visibility',
+          errors: {
+            nameRequired: 'Name is required',
+            emailRequired: 'Email is required',
+            emailInvalid: 'Invalid email format',
+            passwordRequired: 'Password is required',
+            passwordMinLength: 'At least 12 characters',
+            passwordUppercase: 'Must contain an uppercase letter',
+            passwordLowercase: 'Must contain a lowercase letter',
+            passwordDigit: 'Must contain a digit',
+          },
         },
         roles: {
           sales: 'Sales',

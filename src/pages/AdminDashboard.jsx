@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from '../lib/i18n.jsx';
-import { Upload, RefreshCw, Edit2, Trash2, Plus, Users, Database, Store, X, LogOut, ArrowLeft, Link2, Target, Award, Download, FileSpreadsheet, Search, ChevronLeft, ChevronRight, UserCheck, Gift, Loader2 } from 'lucide-react';
+import { Upload, RefreshCw, Edit2, Trash2, Plus, Users, Database, Store, X, LogOut, ArrowLeft, Link2, Target, Award, Download, FileSpreadsheet, Search, ChevronLeft, ChevronRight, UserCheck, Gift, Loader2, Eye, EyeOff } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { AlertModal, ConfirmModal } from '../components/Modal';
 
@@ -85,6 +85,8 @@ export default function AdminDashboard() {
   const [editingUser, setEditingUser] = useState(null);
   const [userForm, setUserForm] = useState({ name: '', email: '', role: 'sales', region: '', level: 'L2', password: '', supervisor_id: '' });
   const [showUserForm, setShowUserForm] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [userFormErrors, setUserFormErrors] = useState({});
 
   const [editingOutlet, setEditingOutlet] = useState(null);
   const [outletForm, setOutletForm] = useState({ name: '', type: '', address: '', contact_person: '', branch_area: '' });
@@ -201,7 +203,27 @@ export default function AdminDashboard() {
     navigate('/login');
   };
 
+  const closeAlert = useCallback(() => setAlert(null), []);
+
+  const validateUserForm = (form, isEditing) => {
+    const errors = {};
+    if (!form.name.trim()) errors.name = t('adminDashboard.users.form.errors.nameRequired');
+    if (!form.email.trim()) errors.email = t('adminDashboard.users.form.errors.emailRequired');
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errors.email = t('adminDashboard.users.form.errors.emailInvalid');
+    if (!isEditing || form.password) {
+      if (!form.password) errors.password = t('adminDashboard.users.form.errors.passwordRequired');
+      else {
+        if (form.password.length < 12) errors.password = t('adminDashboard.users.form.errors.passwordMinLength');
+        else if (!/[A-Z]/.test(form.password)) errors.password = t('adminDashboard.users.form.errors.passwordUppercase');
+        else if (!/[a-z]/.test(form.password)) errors.password = t('adminDashboard.users.form.errors.passwordLowercase');
+        else if (!/[0-9]/.test(form.password)) errors.password = t('adminDashboard.users.form.errors.passwordDigit');
+      }
+    }
+    return errors;
+  };
+
   const handleCrud = async (type, method, id, form, setList, resetState) => {
+    setAlert(null);
     try {
       const url = id ? `/api?type=${type}&id=${id}` : `/api?type=${type}`;
       const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(form) });
@@ -375,7 +397,7 @@ export default function AdminDashboard() {
   };
 
   const openRecordEdit = (r = null) => { setEditingRecord(r); setRecForm(r || { outlet: '', sales: '', date: '', be: '', sku: '' }); setShowRecForm(true); };
-  const openUserEdit = (u = null) => { setEditingUser(u); setUserForm(u || { name: '', email: '', role: 'sales', region: '', level: 'L2', password: '', supervisor_id: '' }); setShowUserForm(true); };
+  const openUserEdit = (u = null) => { setEditingUser(u); setUserForm(u || { name: '', email: '', role: 'sales', region: '', level: 'L2', password: '', supervisor_id: '' }); setShowUserForm(true); setShowPassword(false); setUserFormErrors({}); };
   const openOutletEdit = (o = null) => { setEditingOutlet(o); setOutletForm(o || { name: '', type: '', address: '', contact_person: '', branch_area: '' }); setShowOutletForm(true); };
   const openTargetEdit = (t = null) => {
     setEditingTarget(t);
@@ -421,7 +443,7 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      <AlertModal open={!!alert} type={alert?.type} message={alert?.message} onClose={() => setAlert(null)} />
+      <AlertModal open={!!alert} type={alert?.type} message={alert?.message} onClose={closeAlert} />
 
       <main className="max-w-[1400px] mx-auto px-6 lg:px-10 py-6">
         {activeTab === 'records' && (
@@ -587,15 +609,49 @@ export default function AdminDashboard() {
         {activeTab === 'users' && (
           <div className="space-y-6">
             {showUserForm && (
-              <form onSubmit={(e) => { e.preventDefault(); handleCrud('users', editingUser ? 'PUT' : 'POST', editingUser?.id, userForm, setUsers, () => setShowUserForm(false)); }} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6 grid grid-cols-1 md:grid-cols-8 gap-4 items-end">
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.name')}</label><input required value={userForm.name} onChange={e=>setUserForm({...userForm, name:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder={t('adminDashboard.users.form.namePlaceholder')} /></div>
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.email')}</label><input required type="email" value={userForm.email} onChange={e=>setUserForm({...userForm, email:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder={t('adminDashboard.users.form.emailPlaceholder')} /></div>
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.role')}</label><select value={userForm.role} onChange={e=>setUserForm({...userForm, role:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent"><option value="sales">{t('adminDashboard.common.sales')}</option><option value="supervisor">{t('adminDashboard.users.roles.supervisor')}</option><option value="admin">{t('adminDashboard.users.roles.admin')}</option></select></div>
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.users.roles.supervisor')}</label><select value={userForm.supervisor_id||''} onChange={e=>setUserForm({...userForm, supervisor_id: e.target.value || null})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent"><option value="">{t('adminDashboard.common.none')}</option>{supervisors.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.level')}</label><select value={userForm.level||''} onChange={e=>setUserForm({...userForm, level:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent"><option value="">-</option><option value="L2">L2</option><option value="L3">L3</option></select></div>
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.region')}</label><input value={userForm.region} onChange={e=>setUserForm({...userForm, region:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder={t('adminDashboard.users.form.regionPlaceholder')} /></div>
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.password')}</label><input type="password" value={userForm.password} onChange={e=>setUserForm({...userForm, password:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent" placeholder={editingUser ? t('adminDashboard.users.form.passwordKeep') : t('adminDashboard.users.form.passwordInitial')} /></div>
-                <div className="md:col-span-1 flex gap-2"><button type="submit" className="flex-1 px-3 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">{t('adminDashboard.common.save')}</button><button type="button" onClick={()=>setShowUserForm(false)} className="px-3 py-2 bg-slate-100 dark:bg-slate-800 rounded-lg"><X className="w-4 h-4 mx-auto"/></button></div>
+              <form onSubmit={(e) => { e.preventDefault(); const errors = validateUserForm(userForm, !!editingUser); setUserFormErrors(errors); if (Object.keys(errors).length > 0) return; handleCrud('users', editingUser ? 'PUT' : 'POST', editingUser?.id, userForm, setUsers, () => setShowUserForm(false)); }} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6 space-y-4" noValidate>
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                  <div className="md:col-span-4">
+                    <label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.name')}</label>
+                    <input type="text" value={userForm.name} onChange={e=>{setUserForm({...userForm, name:e.target.value}); setUserFormErrors(prev=>({...prev, name:undefined}));}} className={`w-full px-3 py-2 border rounded-lg bg-transparent ${userFormErrors.name ? 'border-red-400 dark:border-red-500' : 'border-slate-200 dark:border-slate-700'}`} placeholder={t('adminDashboard.users.form.namePlaceholder')} />
+                    {userFormErrors.name && <p className="text-[10px] text-red-500 mt-0.5">{userFormErrors.name}</p>}
+                  </div>
+                  <div className="md:col-span-4">
+                    <label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.email')}</label>
+                    <input type="email" value={userForm.email} onChange={e=>{setUserForm({...userForm, email:e.target.value}); setUserFormErrors(prev=>({...prev, email:undefined}));}} className={`w-full px-3 py-2 border rounded-lg bg-transparent ${userFormErrors.email ? 'border-red-400 dark:border-red-500' : 'border-slate-200 dark:border-slate-700'}`} placeholder={t('adminDashboard.users.form.emailPlaceholder')} />
+                    {userFormErrors.email && <p className="text-[10px] text-red-500 mt-0.5">{userFormErrors.email}</p>}
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.role')}</label>
+                    <select value={userForm.role} onChange={e=>{const r=e.target.value; setUserForm({...userForm, role:r, supervisor_id: r!=='sales' ? '' : userForm.supervisor_id});}} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent"><option value="sales">{t('adminDashboard.common.sales')}</option><option value="supervisor">{t('adminDashboard.users.roles.supervisor')}</option><option value="admin">{t('adminDashboard.users.roles.admin')}</option></select>
+                  </div>
+                  {userForm.role === 'sales' && (
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.users.roles.supervisor')}</label>
+                    <select value={userForm.supervisor_id||''} onChange={e=>setUserForm({...userForm, supervisor_id: e.target.value || null})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent"><option value="">{t('adminDashboard.common.none')}</option>{supervisors.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
+                  </div>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.level')}</label>
+                    <select value={userForm.level||''} onChange={e=>setUserForm({...userForm, level:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent"><option value="">-</option><option value="L2">L2</option><option value="L3">L3</option></select>
+                  </div>
+                  <div className="md:col-span-5">
+                    <label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.password')}</label>
+                    <div className="relative">
+                      <input type={showPassword ? 'text' : 'password'} value={userForm.password} onChange={e=>{setUserForm({...userForm, password:e.target.value}); setUserFormErrors(prev=>({...prev, password:undefined}));}} className={`w-full px-3 py-2 border rounded-lg bg-transparent pr-10 ${userFormErrors.password ? 'border-red-400 dark:border-red-500' : 'border-slate-200 dark:border-slate-700'}`} placeholder={editingUser ? t('adminDashboard.users.form.passwordKeep') : t('adminDashboard.users.form.passwordInitial')} />
+                      <button type="button" onClick={() => setShowPassword(p => !p)} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded" title={t('adminDashboard.users.form.togglePassword')}>
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    {userFormErrors.password && <p className="text-[10px] text-red-500 mt-0.5">{userFormErrors.password}</p>}
+                  </div>
+                  <div className="md:col-span-5 flex gap-2 items-end">
+                    <button type="submit" className="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors">{t('adminDashboard.common.save')}</button>
+                    <button type="button" onClick={()=>setShowUserForm(false)} className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"><X className="w-4 h-4"/></button>
+                  </div>
+                </div>
               </form>
             )}
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6">
