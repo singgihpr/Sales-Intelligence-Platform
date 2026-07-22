@@ -989,20 +989,20 @@ export default function AdminDashboard() {
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {loading ? <tr><td colSpan="8" className="px-4 py-8 text-center text-slate-400 animate-pulse">{t('adminDashboard.common.loading')}</td></tr> :
                   targets.length === 0 ? <tr><td colSpan="8" className="px-4 py-8 text-center text-slate-400">{t('adminDashboard.targets.empty')}</td></tr> :
-                  targets.map(t => {
-                    const salesman = users.find(u => u.id === t.user_id);
-                    const pc = t.percentage_config || {};
-                    const vc = (t.volume_config || {}).tiers || [];
-                    const ac = t.active_outlets_config || {};
-                    return (<tr key={t.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                      <td className="px-4 py-3 font-medium">{salesman?.name || t.user_id}</td>
-                      <td className="px-4 py-3">{t.month}</td>
-                      <td className="px-4 py-3">{t.year}</td>
-                      <td className="px-4 py-3 font-bold text-emerald-600">{t.target_be}</td>
+                  targets.map(target => {
+                    const salesman = allSalesUsers.find(u => u.id === target.user_id);
+                    const pc = target.percentage_config || {};
+                    const vc = (target.volume_config || {}).tiers || [];
+                    const ac = target.active_outlets_config || {};
+                    return (<tr key={target.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                      <td className="px-4 py-3 font-medium">{salesman?.name || target.user_id}</td>
+                      <td className="px-4 py-3">{target.month}</td>
+                      <td className="px-4 py-3">{target.year}</td>
+                      <td className="px-4 py-3 font-bold text-emerald-600">{target.target_be}</td>
                       <td className="px-4 py-3 text-xs text-slate-500">{pc.base_reward ? formatRp(pc.base_reward) : '-'}</td>
                       <td className="px-4 py-3 text-xs text-slate-500">{vc.length ? vc.map(v=>`${v.threshold}BE`).join(', ') : '-'}</td>
                       <td className="px-4 py-3 text-xs text-slate-500">{ac.base_reward ? formatRp(ac.base_reward) : '-'}</td>
-                      <td className="px-4 py-3 flex gap-2 justify-end"><button onClick={()=>openTargetEdit(t)} className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg"><Edit2 className="w-4 h-4"/></button><button onClick={()=>setConfirm({ title: t('adminDashboard.messages.confirmTitle'), message: t('adminDashboard.messages.confirmDelete', { type: 'target' }), onConfirm: () => handleCrud('targets','DELETE',t.id,{},setTargets,()=>{}) })} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg"><Trash2 className="w-4 h-4"/></button></td>
+                      <td className="px-4 py-3 flex gap-2 justify-end"><button onClick={()=>openTargetEdit(target)} className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg"><Edit2 className="w-4 h-4"/></button><button onClick={()=>setConfirm({ title: t('adminDashboard.messages.confirmTitle'), message: t('adminDashboard.messages.confirmDelete', { type: 'target' }), onConfirm: () => handleCrud('targets','DELETE',target.id,{},setTargets,()=>{}) })} className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg"><Trash2 className="w-4 h-4"/></button></td>
                     </tr>);
                   })}
                 </tbody>

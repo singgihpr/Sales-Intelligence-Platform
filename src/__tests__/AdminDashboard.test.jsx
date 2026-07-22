@@ -226,3 +226,38 @@ describe('AdminDashboard AlertModal on CRUD', () => {
     });
   });
 });
+
+describe('AdminDashboard Bonus Targets rendering', () => {
+  beforeEach(() => {
+    fetch.mockReset();
+    localStorage.clear();
+    localStorage.setItem('token', 'admin-token');
+    localStorage.setItem('user_role', 'admin');
+  });
+
+  function renderAdmin() {
+    return render(<AdminDashboard />, { route: '/admin' });
+  }
+
+  function mockTargetsTab(salesUsers, targetsList) {
+    fetch.mockImplementation(async (url) => {
+      if (url.includes('role=sales')) return ok({ data: salesUsers, total: salesUsers.length, page: 1, limit: 100 });
+      if (url.includes('role=supervisor')) return ok(emptyPage);
+      if (url.includes('type=targets')) return ok({ data: targetsList, total: targetsList.length, page: 1, limit: 10 });
+      return ok(emptyPage);
+    });
+  }
+
+  it('shows salesman name instead of UUID on first load', async () => {
+    const salesman = { id: 'sales-uuid-123', name: 'Budi', email: 'budi@test.com', role: 'sales', region: 'Jakarta', level: 'L2' };
+    const target = { id: 't1', user_id: 'sales-uuid-123', month: 7, year: 2026, target_be: 2000, percentage_config: {}, volume_config: {}, active_outlets_config: {} };
+    mockTargetsTab([salesman], [target]);
+
+    renderAdmin();
+    await waitFor(() => screen.getByText('Data Records'));
+    await userEvent.click(screen.getByText('Target Bonus'));
+    await waitFor(() => screen.getByText('Budi'));
+
+    expect(screen.queryByText('sales-uuid-123')).not.toBeInTheDocument();
+  });
+});
