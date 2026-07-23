@@ -431,7 +431,7 @@ export function OutletDetailView({ outlet, onBack }) {
                   </div>
                   <span className="text-sm font-medium">{item.label}</span>
                 </div>
-                <span className="text-sm font-bold">{item.be.toFixed(1)} BE</span>
+                <span className="text-sm font-bold">{(item.be ?? 0).toFixed(1)} BE</span>
               </div>
             ))}
           </div>
