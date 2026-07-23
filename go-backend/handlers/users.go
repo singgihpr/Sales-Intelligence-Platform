@@ -1164,7 +1164,7 @@ func (h *UserHandler) GetDashboard(c echo.Context) error {
 
 	// --- Grouped data for charting ---
 	var groupedData interface{}
-	if groupBy == "day" || groupBy == "week" {
+	if groupBy == "day" || groupBy == "week" || groupBy == "month" {
 		type groupedRow struct {
 			Label   string
 			WeekStart *string
@@ -1192,7 +1192,7 @@ func (h *UserHandler) GetDashboard(c echo.Context) error {
 					gRows = append(gRows, r)
 				}
 			}
-		} else {
+		} else if groupBy == "week" {
 			rows, err := db.Pool.Query(ctx,
 				`SELECT sku_name, TO_CHAR(record_date, 'YYYY-WW') as label,
 				   MIN(record_date)::text as week_start, SUM(volume_be) as daily_volume
@@ -1208,6 +1208,26 @@ func (h *UserHandler) GetDashboard(c echo.Context) error {
 				for rows.Next() {
 					var r groupedRow
 					if err := rows.Scan(&r.SKUName, &r.Label, &r.WeekStart, &r.Volume); err != nil {
+						continue
+					}
+					gRows = append(gRows, r)
+				}
+			}
+		} else {
+			rows, err := db.Pool.Query(ctx,
+				`SELECT sku_name, TO_CHAR(record_date, 'YYYY-MM') as label, SUM(volume_be) as monthly_volume
+				 FROM sales_records
+				 WHERE sales_id = $1 AND record_date >= $2 AND record_date <= $3
+				   AND sku_name IS NOT NULL AND sku_name <> ''
+				 GROUP BY sku_name, TO_CHAR(record_date, 'YYYY-MM')
+				 ORDER BY label`,
+				user.ID, rangeStart, rangeEnd,
+			)
+			if err == nil {
+				defer rows.Close()
+				for rows.Next() {
+					var r groupedRow
+					if err := rows.Scan(&r.SKUName, &r.Label, &r.Volume); err != nil {
 						continue
 					}
 					gRows = append(gRows, r)
