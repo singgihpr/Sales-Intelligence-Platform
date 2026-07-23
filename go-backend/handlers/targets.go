@@ -167,7 +167,7 @@ func (h *TargetHandler) CreateTarget(c echo.Context) error {
 		   percentage_config = EXCLUDED.percentage_config,
 		   volume_config = EXCLUDED.volume_config,
 		   active_outlets_config = EXCLUDED.active_outlets_config
-		 RETURNING *`,
+		 RETURNING id, user_id, month, year, target_be, percentage_config, volume_config, active_outlets_config`,
 		req.UserID, req.Month, req.Year, req.TargetBE, pc, vc, ac,
 	).Scan(&target.ID, &target.UserID, &target.Month, &target.Year, &target.TargetBE, &target.PercentageConfig, &target.VolumeConfig, &target.ActiveOutletsConfig)
 
@@ -202,7 +202,7 @@ func (h *TargetHandler) UpdateTarget(c echo.Context) error {
 			percentage_config = COALESCE($2, percentage_config),
 			volume_config = COALESCE($3, volume_config),
 			active_outlets_config = COALESCE($4, active_outlets_config)
-		 WHERE id = $5 RETURNING *`,
+		 WHERE id = $5 RETURNING id, user_id, month, year, target_be, percentage_config, volume_config, active_outlets_config`,
 		req.TargetBE, req.PercentageConfig, req.VolumeConfig, req.ActiveOutletsConfig, id,
 	).Scan(&target.ID, &target.UserID, &target.Month, &target.Year, &target.TargetBE, &target.PercentageConfig, &target.VolumeConfig, &target.ActiveOutletsConfig)
 
