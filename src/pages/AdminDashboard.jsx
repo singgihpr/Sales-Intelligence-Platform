@@ -1068,8 +1068,16 @@ export default function AdminDashboard() {
                 });
               }} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6 grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
                 <div className="md:col-span-2"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.skuIncentives.form.skuName')}</label>
-                  <input list="skus-list" required value={skuIncForm.sku_name} onChange={e=>setSkuIncForm({...skuIncForm, sku_name:e.target.value})} onInput={e=>setSkuSearch(e.target.value)} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800 text-sm" placeholder={t('adminDashboard.skuIncentives.form.skuPlaceholder')}/>
-                  <datalist id="skus-list">{availableSKUs.map((sku,i)=><option key={i} value={sku}/>)}</datalist>
+                  <div className="relative">
+                    <input required value={skuIncForm.sku_name} onChange={e=>setSkuIncForm({...skuIncForm, sku_name:e.target.value})} onFocus={()=>{if(!skuIncForm.sku_name) fetchSkus()}} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800 text-sm" placeholder={t('adminDashboard.skuIncentives.form.skuPlaceholder')}/>
+                    {skuIncForm.sku_name && availableSKUs.length > 0 && (
+                      <div className="absolute z-20 mt-1 w-full max-h-48 overflow-y-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg">
+                        {availableSKUs.filter(sku => sku.toLowerCase().includes(skuIncForm.sku_name.toLowerCase())).slice(0, 50).map(sku => (
+                          <button key={sku} type="button" onClick={()=>setSkuIncForm({...skuIncForm, sku_name: sku})} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-800">{sku}</button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.skuIncentives.form.bonusBE')}</label><input type="number" step="0.1" required value={skuIncForm.bonus_be} onChange={e=>setSkuIncForm({...skuIncForm, bonus_be:Number(e.target.value)})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800 text-sm"/></div>
                 <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.skuIncentives.form.startDate')}</label><input type="date" required value={skuIncForm.start_date} onChange={e=>setSkuIncForm({...skuIncForm, start_date:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800 text-sm"/></div>
