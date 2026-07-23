@@ -446,7 +446,7 @@ export function OutletDetailView({ outlet, onBack }) {
           </h3>
           {historyLoading && <RefreshCw className="w-4 h-4 text-slate-400 animate-spin" />}
         </div>
-        <Card className="p-0 overflow-hidden">
+        <Card className="p-0 overflow-x-auto">
           {historyLoading && transactionHistory.length === 0 && (
             <div className="flex flex-col items-center justify-center py-8 text-slate-400">
               <div className="w-6 h-6 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-2"></div>
@@ -463,15 +463,10 @@ export function OutletDetailView({ outlet, onBack }) {
             <p className="p-4 text-center text-xs text-slate-400">{t('outletViews.noHistory')}</p>
           )}
           {transactionHistory.map((item, idx) => (
-            <div key={item.id || idx} className="flex items-center justify-between p-4 border-b last:border-none border-slate-50 dark:border-slate-800">
-              <div className="flex items-center gap-3">
-                <Calendar className="w-4 h-4 text-slate-300" />
-                <div>
-                  <span className="text-sm font-medium">{new Date(item.date).toLocaleDateString(dateLocale, { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-                  {item.sku && <p className="text-[10px] text-slate-400 mt-0.5">{item.sku}</p>}
-                </div>
-              </div>
-              <span className="text-sm font-bold">{Number(item.be).toFixed(1)} BE</span>
+            <div key={item.id || idx} className="flex items-center justify-between gap-3 px-4 py-2.5 border-b last:border-none border-slate-50 dark:border-slate-800">
+              <span className="text-sm font-medium text-left truncate min-w-0 flex-1">{item.sku || '—'}</span>
+              <span className="text-sm font-bold whitespace-nowrap">{Number(item.be).toFixed(1)} BE</span>
+              <span className="text-xs text-slate-400 whitespace-nowrap">{new Date(item.date).toLocaleDateString(dateLocale, { day: 'numeric', month: 'short', year: 'numeric' })}</span>
             </div>
           ))}
         </Card>
@@ -501,17 +496,6 @@ export function OutletDetailView({ outlet, onBack }) {
         <p className="text-[10px] text-slate-400 text-center mt-2">
           {t('outletViews.transactionsFound', { count: historyTotal })}
         </p>
-      </section>
-
-      {/* Visit Log */}
-      <section>
-        <h3 className="font-bold mb-3 flex items-center gap-2 text-sm">
-          <MessageSquare className="w-4 h-4 text-emerald-600" /> {t('outletViews.visitLog')}
-        </h3>
-        <Card>
-          <textarea className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-xl p-4 text-sm focus:ring-2 focus:ring-emerald-500 outline-none resize-none" placeholder={t('outletViews.visitPlaceholder')} rows="3" value={note} onChange={(e) => setNote(e.target.value)}></textarea>
-          <button className="w-full mt-3 bg-emerald-600 text-white font-bold py-3 rounded-xl shadow-lg shadow-emerald-200 active:scale-95 transition-transform">{t('outletViews.saveReport')}</button>
-        </Card>
       </section>
     </div>
   );
