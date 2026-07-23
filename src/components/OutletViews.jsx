@@ -205,7 +205,7 @@ export function OutletListView({ outlets, onSelectOutlet, dateFilter }) {
               </div>
             </div>
             <div className="text-right">
-              <p className="text-xs font-bold text-slate-900 dark:text-white">{outlet.beMonth.toFixed(1)} BE</p>
+              <p className="text-xs font-bold text-slate-900 dark:text-white">{(outlet.beMonth || 0).toFixed(1)} BE</p>
               <p className="text-[10px] text-slate-400 uppercase font-bold tracking-tighter">{t('common.monthThis')}</p>
             </div>
           </Card>
@@ -297,7 +297,7 @@ export function OutletDetailView({ outlet, onBack }) {
   if (outlet.trend && outlet.trend !== 0 && prevTotal > 0) {
     // If trend is MoM from prev to current: current = prev * (1 + trend/100)
     // So prev = current / (1 + trend/100)
-    const trendFactor = 1 + (outlet.trend / 100);
+    const trendFactor = 1 + ((outlet.trend || 0) / 100);
     prev = current / trendFactor;
     prev2 = prevTotal - prev;
   } else {
@@ -431,7 +431,7 @@ export function OutletDetailView({ outlet, onBack }) {
                   </div>
                   <span className="text-sm font-medium">{item.label}</span>
                 </div>
-                <span className="text-sm font-bold">{(item.be ?? 0).toFixed(1)} BE</span>
+                <span className="text-sm font-bold">{(item.be || 0).toFixed(1)} BE</span>
               </div>
             ))}
           </div>
@@ -465,7 +465,7 @@ export function OutletDetailView({ outlet, onBack }) {
           {transactionHistory.map((item, idx) => (
             <div key={item.id || idx} className="flex items-center justify-between gap-3 px-4 py-2.5 border-b last:border-none border-slate-50 dark:border-slate-800">
               <span className="text-sm font-medium text-left truncate min-w-0 flex-1">{item.sku || '—'}</span>
-              <span className="text-sm font-bold whitespace-nowrap">{Number(item.be).toFixed(1)} BE</span>
+              <span className="text-sm font-bold whitespace-nowrap">{(item.be || 0).toFixed(1)} BE</span>
               <span className="text-xs text-slate-400 whitespace-nowrap">{new Date(item.date).toLocaleDateString(dateLocale, { day: 'numeric', month: 'short', year: 'numeric' })}</span>
             </div>
           ))}
