@@ -571,6 +571,9 @@ const dictionaries = {
         add: 'Tambah Insentif',
         empty: 'Belum ada insentif SKU.',
         periodSeparator: 's/d',
+        tooltipTitle: 'Info Insentif SKU',
+        tooltipDesc: 'Berlaku spesifik per SKU untuk event, promo musiman, atau penjualan tertentu. Bonus BE dihitung per transaksi dari SKU terkait.',
+        tooltipExample: "Contoh: SKU 'Pisang Cavendish 9KG' mendapat +5 BE per transaksi selama promo Ramadan.",
         form: {
           skuName: 'Nama SKU',
           bonusBE: 'Bonus BE/Unit',
@@ -1170,6 +1173,9 @@ const dictionaries = {
         add: 'Add Incentive',
         empty: 'No SKU incentives yet.',
         periodSeparator: 'to',
+        tooltipTitle: 'SKU Incentive Info',
+        tooltipDesc: 'Applies per SKU for specific events, seasonal promos, or sales drives. Bonus BE is calculated per qualifying transaction.',
+        tooltipExample: "Example: SKU 'Cavendish Banana 9KG' earns +5 BE per transaction during Ramadan promo.",
         form: {
           skuName: 'SKU Name',
           bonusBE: 'Bonus BE/Unit',

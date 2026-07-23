@@ -58,6 +58,11 @@ type Target struct {
 	ActiveOutletsConfig interface{} `json:"active_outlets_config"`
 }
 
+type SKU struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
 type SKUIncentive struct {
 	ID        string      `json:"id"`
 	SKUName   string      `json:"sku_name"`

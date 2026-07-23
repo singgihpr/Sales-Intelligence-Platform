@@ -50,6 +50,7 @@ func main() {
 	assignmentHandler := &handlers.AssignmentHandler{}
 	targetHandler := &handlers.TargetHandler{}
 	incentiveHandler := &handlers.IncentiveHandler{}
+	skUHandler := &handlers.SKUHandler{}
 	uploadHandler := &handlers.UploadHandler{}
 
 	// ── POST /api ──────────────────────────────────────────────
@@ -116,6 +117,8 @@ func main() {
 			return targetHandler.ListTargets(c)
 		case "sku-incentives":
 			return incentiveHandler.ListIncentives(c)
+		case "skus":
+			return skUHandler.ListSKUs(c)
 		case "outlet-history":
 			return outletHandler.GetOutletHistory(c)
 		case "analytics":

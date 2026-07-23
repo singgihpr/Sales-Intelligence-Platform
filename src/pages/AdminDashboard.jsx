@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from '../lib/i18n.jsx';
-import { Upload, RefreshCw, Edit2, Trash2, Plus, Users, Database, Store, X, LogOut, ArrowLeft, Link2, Target, Award, Download, FileSpreadsheet, Search, ChevronLeft, ChevronRight, UserCheck, Gift, Loader2, Eye, EyeOff } from 'lucide-react';
+import { Upload, RefreshCw, Edit2, Trash2, Plus, Users, Database, Store, X, LogOut, ArrowLeft, Link2, Target, Award, Download, FileSpreadsheet, Search, ChevronLeft, ChevronRight, UserCheck, Gift, Loader2, Eye, EyeOff, Info } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { AlertModal, ConfirmModal } from '../components/Modal';
 
@@ -107,19 +107,44 @@ export default function AdminDashboard() {
   const [targetForm, setTargetForm] = useState({ user_id: '', month: new Date().getMonth()+1, year: new Date().getFullYear(), target_be: 2000 });
   const [editingTarget, setEditingTarget] = useState(null);
 
-  // SKU Incentives
-  const [skuIncentives, setSkuIncentives] = useState([]);
-  const [showSkuIncForm, setShowSkuIncForm] = useState(false);
-  const [skuIncForm, setSkuIncForm] = useState({ sku_name: '', bonus_be: 0, start_date: '', end_date: '', is_active: true, notes: '' });
-  const [editingSkuInc, setEditingSkuInc] = useState(null);
-
   const [showVacant, setShowVacant] = useState(false);
   const [previewData, setPreviewData] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [uploadLoading, setUploadLoading] = useState(false);
   const [uploadFile, setUploadFile] = useState(null);
 
+  // SKU Incentives - Initialize form and states
+  const initializeForm = () => ({
+    sku_name: '',
+    bonus_be: 0,
+    start_date: new Date().toISOString().split('T')[0],
+    end_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    is_active: true,
+    notes: ''
+  });
+
+  const [skuIncentives, setSkuIncentives] = useState([]);
+  const [showSkuIncForm, setShowSkuIncForm] = useState(false);
+  const [skuIncForm, setSkuIncForm] = useState(initializeForm());
+  const [editingSkuInc, setEditingSkuInc] = useState(null);
+  const [availableSKUs, setAvailableSKUs] = useState([]);
+  const [skuSearch, setSkuSearch] = useState('');
+
   const token = localStorage.getItem('token');
+
+  // Fetch SKUs for dropdown
+  const fetchSkus = async (search = '') => {
+    try {
+      const res = await fetch(`/api?type=skus&search=${encodeURIComponent(search)}&limit=1000`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const result = await res.json();
+      setAvailableSKUs(result.data.map(sku => sku.name));
+    } catch (e) {
+      // Silently ignore to avoid disrupting UI
+    }
+  };
 
   const fetchTable = async (type, overrides = {}) => {
     const p = pagination[type];
@@ -152,6 +177,26 @@ export default function AdminDashboard() {
       setPagination(prev => ({ ...prev, [type]: { ...prev[type], page, limit, total, search } }));
     } catch (e) { setAlert({ type: 'error', message: t('adminDashboard.messages.fetchError', { type, message: e.message }) }); }
   };
+
+  // Initialize SKUs on component mount
+  useEffect(() => {
+    fetchSkus();
+  }, []);
+
+  // Debounced SKU search
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      fetchSkus(skuSearch);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [skuSearch]);
+
+  // Initialize form after SKUs are loaded
+  useEffect(() => {
+    if (availableSKUs.length > 0 && !showSkuIncForm && editingSkuInc) {
+      setSkuIncForm(prev => ({ ...prev, sku_name: editingSkuInc.sku_name }));
+    }
+  }, [availableSKUs.length, showSkuIncForm, editingSkuInc]);
 
   const fetchAllSalesUsers = async () => {
     try {
@@ -1022,7 +1067,10 @@ export default function AdminDashboard() {
                   setEditingSkuInc(null);
                 });
               }} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6 grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
-                <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.skuIncentives.form.skuName')}</label><input required value={skuIncForm.sku_name} onChange={e=>setSkuIncForm({...skuIncForm, sku_name:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800 text-sm" placeholder={t('adminDashboard.skuIncentives.form.skuPlaceholder')}/></div>
+                <div className="md:col-span-2"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.skuIncentives.form.skuName')}</label>
+                  <input list="skus-list" required value={skuIncForm.sku_name} onChange={e=>setSkuIncForm({...skuIncForm, sku_name:e.target.value})} onInput={e=>setSkuSearch(e.target.value)} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800 text-sm" placeholder={t('adminDashboard.skuIncentives.form.skuPlaceholder')}/>
+                  <datalist id="skus-list">{availableSKUs.map((sku,i)=><option key={i} value={sku}/>)}</datalist>
+                </div>
                 <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.skuIncentives.form.bonusBE')}</label><input type="number" step="0.1" required value={skuIncForm.bonus_be} onChange={e=>setSkuIncForm({...skuIncForm, bonus_be:Number(e.target.value)})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800 text-sm"/></div>
                 <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.skuIncentives.form.startDate')}</label><input type="date" required value={skuIncForm.start_date} onChange={e=>setSkuIncForm({...skuIncForm, start_date:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800 text-sm"/></div>
                 <div className="md:col-span-1"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.skuIncentives.form.endDate')}</label><input type="date" required value={skuIncForm.end_date} onChange={e=>setSkuIncForm({...skuIncForm, end_date:e.target.value})} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800 text-sm"/></div>
@@ -1034,7 +1082,19 @@ export default function AdminDashboard() {
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
                 <div>
-                  <h2 className="text-lg font-bold text-slate-900 dark:text-white">{t('adminDashboard.skuIncentives.title')}</h2>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-lg font-bold text-slate-900 dark:text-white">{t('adminDashboard.skuIncentives.title')}</h2>
+                    <div className="relative group">
+                      <Info className="w-4 h-4 text-slate-400 cursor-help" />
+                      <div className="hidden group-hover:block absolute left-0 z-10 w-72 p-3 bg-slate-900 text-white text-xs rounded-lg shadow-lg mt-2">
+                        <div className="font-bold mb-2">{t('adminDashboard.skuIncentives.tooltipTitle')}:</div>
+                        <div className="text-slate-300 space-y-1">
+                          <p>{t('adminDashboard.skuIncentives.tooltipDesc')}</p>
+                          <p className="mt-2 text-emerald-400">{t('adminDashboard.skuIncentives.tooltipExample')}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                   <p className="text-xs text-slate-500 mt-1">{t('adminDashboard.skuIncentives.subtitle')}</p>
                 </div>
                 <button onClick={()=>{
