@@ -66,6 +66,8 @@ export default function AdminDashboard() {
   const [checkedSalesmen, setCheckedSalesmen] = useState([]);
 
   const [recordFilters, setRecordFilters] = useState({ dateStart: '', dateEnd: '', salesId: '', outletId: '' });
+  const [outletSearch, setOutletSearch] = useState('');
+  const [outletDropdownOpen, setOutletDropdownOpen] = useState(false);
 
   const [pagination, setPagination] = useState({
     records: { page: 1, limit: 10, total: 0, search: '' },
@@ -601,8 +603,20 @@ export default function AdminDashboard() {
                 <div><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.date')} {t('adminDashboard.common.from')}</label><input type="date" value={recordFilters.dateStart} onChange={e=>setRecordFilters(f=>({...f, dateStart:e.target.value}))} className="px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent text-sm" /></div>
                 <div><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.date')} {t('adminDashboard.common.to')}</label><input type="date" value={recordFilters.dateEnd} onChange={e=>setRecordFilters(f=>({...f, dateEnd:e.target.value}))} className="px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent text-sm" /></div>
                 <div><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.sales')}</label><select value={recordFilters.salesId} onChange={e=>setRecordFilters(f=>({...f, salesId:e.target.value}))} className="px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800 text-sm"><option value="">All</option>{allSalesUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}</select></div>
-                <div><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.outlet')}</label><select value={recordFilters.outletId} onChange={e=>setRecordFilters(f=>({...f, outletId:e.target.value}))} className="px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800 text-sm"><option value="">All</option>{outlets.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}</select></div>
-                <div className="flex items-end"><button onClick={() => { setRecordFilters({ dateStart: '', dateEnd: '', salesId: '', outletId: '' }); setTimeout(() => fetchTable('records'), 0); }} className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-lg">{t('adminDashboard.common.reset')}</button></div>
+                <div><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.common.outlet')}</label>
+                  <div className="relative">
+                    <input value={outletSearch} onChange={e=>setOutletSearch(e.target.value)} onFocus={()=>setOutletDropdownOpen(true)} onBlur={()=>setTimeout(()=>setOutletDropdownOpen(false), 200)} className="w-full px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800 text-sm" placeholder={t('adminDashboard.common.all')}/>
+                    {outletDropdownOpen && (
+                      <div className="absolute z-20 mt-1 w-full max-h-48 overflow-y-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg">
+                        <button type="button" onClick={()=>{setRecordFilters(f=>({...f, outletId: ''})); setOutletSearch(''); setOutletDropdownOpen(false)}} className="w-full text-left px-3 py-2 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-800">{t('adminDashboard.common.all')}</button>
+                        {outlets.filter(o => o.name.toLowerCase().includes(outletSearch.toLowerCase())).slice(0, 50).map(o => (
+                          <button key={o.id} type="button" onClick={()=>{setRecordFilters(f=>({...f, outletId: o.id})); setOutletSearch(o.name); setOutletDropdownOpen(false)}} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-800">{o.name}</button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-end"><button onClick={() => { setRecordFilters({ dateStart: '', dateEnd: '', salesId: '', outletId: '' }); setOutletSearch(''); setOutletDropdownOpen(false); setTimeout(() => fetchTable('records'), 0); }} className="px-3 py-1.5 text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-lg">{t('adminDashboard.common.reset')}</button></div>
               </div>
               <div className="overflow-x-auto"><table className="w-full text-sm text-left min-w-[700px]">
                 <thead className="text-xs text-slate-500 uppercase bg-slate-50 dark:bg-slate-800"><tr><th className="px-4 py-3">{t('adminDashboard.common.outlet')}</th><th className="px-4 py-3">{t('adminDashboard.common.sales')}</th><th className="px-4 py-3">{t('adminDashboard.common.date')}</th><th className="px-4 py-3">{t('adminDashboard.common.sku')}</th><th className="px-4 py-3">{t('adminDashboard.records.previewHeaders.volume')}</th><th className="px-4 py-3 text-right">{t('adminDashboard.common.actions')}</th></tr></thead>

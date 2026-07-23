@@ -337,6 +337,7 @@ const dictionaries = {
       backToSalesDashboard: 'Kembali ke Dashboard Sales',
       logout: 'Logout',
       common: {
+        all: 'Semua',
         loading: 'Memuat...',
         delete: 'Hapus',
         save: 'Simpan',
@@ -939,6 +940,7 @@ const dictionaries = {
       backToSalesDashboard: 'Back to Sales Dashboard',
       logout: 'Logout',
       common: {
+        all: 'All',
         loading: 'Loading...',
         delete: 'Delete',
         save: 'Save',
