@@ -18,7 +18,7 @@ func (h *SKUHandler) ListSKUs(c echo.Context) error {
         page = 1
     }
     limit, _ := strconv.Atoi(c.QueryParam("limit"))
-    if limit < 1 || limit > 100 {
+    if limit < 1 {
         limit = 10
     }
     offset := (page - 1) * limit

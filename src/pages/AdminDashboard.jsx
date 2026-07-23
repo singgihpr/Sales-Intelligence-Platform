@@ -129,6 +129,7 @@ export default function AdminDashboard() {
   const [editingSkuInc, setEditingSkuInc] = useState(null);
   const [availableSKUs, setAvailableSKUs] = useState([]);
   const [skuSearch, setSkuSearch] = useState('');
+  const [skuDropdownOpen, setSkuDropdownOpen] = useState(false);
 
   const token = localStorage.getItem('token');
 
@@ -1069,11 +1070,11 @@ export default function AdminDashboard() {
               }} className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-800 p-6 grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
                 <div className="md:col-span-2"><label className="block text-xs font-medium text-slate-500 mb-1">{t('adminDashboard.skuIncentives.form.skuName')}</label>
                   <div className="relative">
-                    <input required value={skuIncForm.sku_name} onChange={e=>setSkuIncForm({...skuIncForm, sku_name:e.target.value})} onFocus={()=>{if(!skuIncForm.sku_name) fetchSkus()}} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800 text-sm" placeholder={t('adminDashboard.skuIncentives.form.skuPlaceholder')}/>
-                    {skuIncForm.sku_name && availableSKUs.length > 0 && (
+                    <input required value={skuIncForm.sku_name} onChange={e=>setSkuIncForm({...skuIncForm, sku_name:e.target.value})} onFocus={()=>{fetchSkus(); setSkuDropdownOpen(true)}} onBlur={()=>setTimeout(()=>setSkuDropdownOpen(false), 200)} className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-transparent dark:bg-slate-800 text-sm" placeholder={t('adminDashboard.skuIncentives.form.skuPlaceholder')}/>
+                    {skuDropdownOpen && availableSKUs.length > 0 && (
                       <div className="absolute z-20 mt-1 w-full max-h-48 overflow-y-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg">
                         {availableSKUs.filter(sku => sku.toLowerCase().includes(skuIncForm.sku_name.toLowerCase())).slice(0, 50).map(sku => (
-                          <button key={sku} type="button" onClick={()=>setSkuIncForm({...skuIncForm, sku_name: sku})} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-800">{sku}</button>
+                          <button key={sku} type="button" onClick={()=>{setSkuIncForm({...skuIncForm, sku_name: sku}); setSkuDropdownOpen(false)}} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-100 dark:hover:bg-slate-800">{sku}</button>
                         ))}
                       </div>
                     )}
@@ -1091,9 +1092,9 @@ export default function AdminDashboard() {
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
                 <div>
                   <div className="flex items-center gap-2">
-                    <h2 className="text-lg font-bold text-slate-900 dark:text-white">{t('adminDashboard.skuIncentives.title')}</h2>
-                    <div className="relative group">
-                      <Info className="w-4 h-4 text-slate-400 cursor-help" />
+                    <h2 className="text-lg font-bold leading-5 text-slate-900 dark:text-white">{t('adminDashboard.skuIncentives.title')}</h2>
+                    <div className="relative group pb-1">
+                      <Info className="w-4 h-4 text-slate-400 cursor-help -mt-0.5" />
                       <div className="hidden group-hover:block absolute left-0 z-10 w-72 p-3 bg-slate-900 text-white text-xs rounded-lg shadow-lg mt-2">
                         <div className="font-bold mb-2">{t('adminDashboard.skuIncentives.tooltipTitle')}:</div>
                         <div className="text-slate-300 space-y-1">
