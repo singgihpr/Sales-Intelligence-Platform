@@ -657,6 +657,9 @@ func (h *UserHandler) GetTeamDashboard(c echo.Context, user *middleware.JWTClaim
 			ol.AvgBE = ohs.AvgBE
 			ol.Trend = ohs.Trend
 			ol.Freq3Mo = ohs.Freq3Mo
+			ol.BEMonth = beCurrent
+			ol.BePrev = bePrev
+			ol.BePrev2 = bePrev2
 			ol.HealthBreakdown = struct {
 				Volume    int `json:"volume"`
 				Trend     int `json:"trend"`
@@ -1338,6 +1341,8 @@ func (h *UserHandler) GetDashboard(c echo.Context) error {
 			BranchArea:      o.BranchArea,
 			BEMonth:         o.BeCurrent,
 			Health:          ohs.Score,
+			BePrev:          o.BePrev,
+			BePrev2:         o.BePrev2,
 			HealthBreakdown: struct {
 				Volume    int `json:"volume"`
 				Trend     int `json:"trend"`

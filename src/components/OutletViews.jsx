@@ -206,7 +206,6 @@ export function OutletListView({ outlets, onSelectOutlet, dateFilter }) {
             </div>
             <div className="text-right">
               <p className="text-xs font-bold text-slate-900 dark:text-white">{(outlet.beMonth || 0).toFixed(1)} BE</p>
-              <p className="text-[10px] text-slate-400 uppercase font-bold tracking-tighter">{t('common.monthThis')}</p>
             </div>
           </Card>
         ))}
@@ -282,34 +281,10 @@ export function OutletDetailView({ outlet, onBack }) {
   const trendPositive = (outlet.trend || 0) >= 0;
   const trendValue = Math.abs(outlet.trend || 0).toFixed(1);
   
-  // Prepare 3-month history data
-  const history3Mo = [
-    { label: t('common.monthThis'), be: outlet.beMonth || 0, current: true },
-    { label: t('common.monthLast'), be: (outlet.avgBE || 0) * 3 - (outlet.beMonth || 0) - ((outlet.avgBE || 0) * 3 - (outlet.beMonth || 0) - (outlet.totalBE3Mo || 0)) / 2, be: outlet.totalBE3Mo ? outlet.totalBE3Mo - outlet.beMonth - ((outlet.totalBE3Mo - outlet.beMonth) * (trendPositive ? 1/(1+outlet.trend/100) : 1/(1-outlet.trend/100))) : 0 },
-  ];
-  
-  // Better approach: calculate prev and prev2 from total
-  const total3Mo = outlet.totalBE3Mo || 0;
-  const current = outlet.beMonth || 0;
-  const prevTotal = total3Mo - current;
-  let prev, prev2;
-  
-  if (outlet.trend && outlet.trend !== 0 && prevTotal > 0) {
-    // If trend is MoM from prev to current: current = prev * (1 + trend/100)
-    // So prev = current / (1 + trend/100)
-    const trendFactor = 1 + ((outlet.trend || 0) / 100);
-    prev = current / trendFactor;
-    prev2 = prevTotal - prev;
-  } else {
-    // Fallback: split evenly
-    prev = prevTotal / 2;
-    prev2 = prevTotal / 2;
-  }
-  
   const monthlyHistory = [
-    { label: t('common.monthThis'), be: current, current: true },
-    { label: t('common.monthLast'), be: Math.max(0, prev) },
-    { label: t('common.monthPrev2'), be: Math.max(0, prev2) },
+    { label: t('common.monthThis'), be: outlet.beMonth || 0, current: true },
+    { label: t('common.monthLast'), be: outlet.bePrev || 0 },
+    { label: t('common.monthPrev2'), be: outlet.bePrev2 || 0 },
   ];
 
   const breakdown = outlet.healthBreakdown || { volume: 0, trend: 0, freq: 0 };
@@ -370,7 +345,7 @@ export function OutletDetailView({ outlet, onBack }) {
           />
           <ProgressBar 
             label={t('outletViews.frequency20')} 
-            value={Math.round(breakdown.freq || 0)} 
+            value={Math.round(breakdown.frequency || 0)} 
             color="bg-violet-500" 
             percentage={20}
           />

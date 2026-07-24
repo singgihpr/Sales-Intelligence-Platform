@@ -143,6 +143,8 @@ type OutletHealth struct {
 		Frequency int `json:"frequency"`
 	} `json:"healthBreakdown"`
 	TotalBE3Mo float64 `json:"totalBE3Mo"`
+	BePrev     float64 `json:"bePrev"`
+	BePrev2    float64 `json:"bePrev2"`
 	AvgBE      float64 `json:"avgBE"`
 	Trend      float64 `json:"trend"`
 	Freq3Mo    int     `json:"freq3Mo"`
